@@ -11,7 +11,8 @@ signals_snapshot.json
 backend/logs/
 backend/test_write.txt
 
-*.md
+CLAUDE.md
+PSX_PHASE2_PLAN.md
 
 ### Python ###
 # Byte-compiled / optimized / DLL files
