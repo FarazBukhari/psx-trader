@@ -1,18 +1,18 @@
 {
-  "_comment": "PSX Short-Term Strategy — auto-refreshed 2026-04-28. Source: live. Levels: 2.5%/4%/4.5% from market open prices.",
+  "_comment": "PSX Short-Term Strategy — auto-refreshed 2026-04-29. Source: live. Levels: 2.5%/4%/4.5% from market open prices.",
   "symbols": {
-    "LOADS":    { "buy_below":  14.41, "sell_above":  15.37, "stop_loss":  14.10 },
-    "TBL":      { "buy_below":   9.36, "sell_above":   9.98, "stop_loss":   9.17 },
-    "BECO":     { "buy_below":   5.49, "sell_above":   5.87, "stop_loss":   5.39 },
-    "PAEL":     { "buy_below":  39.83, "sell_above":  42.48, "stop_loss":  39.01 },
-    "MLCF":     { "buy_below":  79.94, "sell_above":  85.27, "stop_loss":  78.30 },
-    "BAFL":     { "buy_below":  59.38, "sell_above":  63.34, "stop_loss":  58.16 },
-    "NBP":      { "buy_below": 197.72, "sell_above": 210.90, "stop_loss": 193.66 },
-    "POWER":    { "buy_below":  18.43, "sell_above":  19.66, "stop_loss":  18.05 },
-    "UBL":      { "buy_below": 391.84, "sell_above": 417.97, "stop_loss": 383.80 },
-    "LOTCHEM":  { "buy_below":  26.66, "sell_above":  28.43, "stop_loss":  26.11 },
-    "AGHA":     { "buy_below":   7.56, "sell_above":   8.06, "stop_loss":   7.40 },
-    "NRSL":     { "buy_below":  35.49, "sell_above":  37.86, "stop_loss":  34.76 }
+    "LOADS":    { "buy_below":  14.28, "sell_above":  15.24, "stop_loss":  13.99 },
+    "BOP":      { "buy_below":  33.97, "sell_above":  36.23, "stop_loss":  33.27 },
+    "PAEL":     { "buy_below":  38.52, "sell_above":  41.09, "stop_loss":  37.73 },
+    "BECO":     { "buy_below":   5.50, "sell_above":   5.87, "stop_loss":   5.39 },
+    "NBP":      { "buy_below": 191.34, "sell_above": 204.15, "stop_loss": 187.47 },
+    "TBL":      { "buy_below":   9.32, "sell_above":   9.94, "stop_loss":   9.13 },
+    "ASL":      { "buy_below":  11.81, "sell_above":  12.59, "stop_loss":  11.58 },
+    "BAFL":     { "buy_below":  58.51, "sell_above":  62.41, "stop_loss":  57.31 },
+    "DGKC":     { "buy_below": 168.58, "sell_above": 179.92, "stop_loss": 165.22 },
+    "FCCL":     { "buy_below":  46.79, "sell_above":  49.91, "stop_loss":  45.83 },
+    "AGHA":     { "buy_below":   7.53, "sell_above":   8.03, "stop_loss":   7.37 },
+    "HCAR":     { "buy_below": 214.35, "sell_above": 228.64, "stop_loss": 209.82 }
   },
   "global": {
     "poll_interval_seconds": 15,

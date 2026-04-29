@@ -19,6 +19,8 @@ from .api.routes import router
 from .api.history_routes import history_router
 from .api.system_routes import system_router
 from .api.portfolio_routes import portfolio_router
+from .api.prediction_routes import prediction_router
+from .api.backtest_routes import backtest_router
 from .db import init_db
 from .logger import setup_logging
 from .scraper.psx_scraper import PSXScraper
@@ -97,6 +99,9 @@ async def _poll_loop(scraper: PSXScraper):
             stocks  = await scraper.fetch()
             signals = app_state.engine.process(stocks, horizon=app_state.horizon)
 
+            # Phase 3: enrich signals with forward-looking prediction metadata
+            signals = app_state.prediction_engine.enrich_batch(signals)
+
             # Derive stale status from the first returned row (all rows share the same source)
             first = stocks[0] if stocks else {}
             is_stale = bool(first.get("stale", False))
@@ -117,6 +122,9 @@ async def _poll_loop(scraper: PSXScraper):
                 app_state.signals[s["symbol"]] = s
                 # Persist non-HOLD / changed signals regardless of stale status
                 asyncio.create_task(app_state.history_store.save_signal(s))
+
+            # Phase 3: log non-neutral predictions to DB (fire-and-forget)
+            asyncio.create_task(app_state.prediction_engine.log_predictions(signals))
 
             app_state.last_update  = time.time()
             app_state.data_source  = first.get("source", "unknown")
@@ -180,6 +188,8 @@ async def lifespan(app: FastAPI):
     try:
         stocks  = await scraper.fetch()
         signals = app_state.engine.process(stocks, horizon=app_state.horizon)
+        # Phase 3: enrich warm-up signals with predictions
+        signals = app_state.prediction_engine.enrich_batch(signals)
         for s in stocks:
             app_state.stocks[s["symbol"]] = s
         for s in signals:
@@ -234,6 +244,8 @@ app.include_router(router)
 app.include_router(history_router)
 app.include_router(system_router)
 app.include_router(portfolio_router)
+app.include_router(prediction_router)
+app.include_router(backtest_router)
 
 
 # ---------------------------------------------------------------------------

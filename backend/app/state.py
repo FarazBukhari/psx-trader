@@ -12,6 +12,7 @@ from typing import Optional
 from .strategy.signal_engine import SignalEngine
 from .db.history_store import HistoryStore
 from .portfolio.portfolio_manager import PortfolioManager
+from .prediction.prediction_engine import PredictionEngine
 
 
 @dataclass
@@ -29,6 +30,8 @@ class AppState:
     history_store: HistoryStore = field(default_factory=HistoryStore)
     # Phase 2: portfolio manager
     portfolio: PortfolioManager = field(default_factory=PortfolioManager)
+    # Phase 3: prediction engine
+    prediction_engine: PredictionEngine = field(default_factory=PredictionEngine)
     # Stale-data tracking: True when prices come from snapshot, not a live scrape
     data_stale: bool = False
     stale_reason: Optional[str] = None   # human-readable explanation for UI banner
