@@ -10,14 +10,16 @@ import Header           from './components/layout/Header'
 import Dashboard        from './pages/Dashboard'
 import Portfolio        from './pages/Portfolio'
 import Backtest         from './pages/Backtest'
+import Performance      from './pages/Performance'
 
 function Pages() {
   const tab = useUIStore((s) => s.activeTab)
   return (
     <main className="flex-1 overflow-auto">
-      {tab === 'dashboard' && <Dashboard />}
-      {tab === 'portfolio' && <Portfolio />}
-      {tab === 'backtest'  && <Backtest />}
+      {tab === 'dashboard'   && <Dashboard />}
+      {tab === 'portfolio'   && <Portfolio />}
+      {tab === 'backtest'    && <Backtest />}
+      {tab === 'performance' && <Performance />}
     </main>
   )
 }

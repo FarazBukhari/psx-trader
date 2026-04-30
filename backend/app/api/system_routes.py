@@ -26,14 +26,178 @@ Response shape:
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import time as _time
+from typing import Optional
 
-from fastapi import APIRouter
+import httpx  # already a project dependency (used by PSXScraper)
+
+from fastapi import APIRouter, BackgroundTasks, Query
 
 from ..market_hours import market_status, MarketState
 from ..state import app_state
 
+logger = logging.getLogger("psx.system")
 system_router = APIRouter(prefix="/api/system")
+
+# PSX Data Portal EOD endpoint — returns full history for any listed symbol
+_PSX_EOD_URL = "https://dps.psx.com.pk/timeseries/eod/{symbol}"
+_PSX_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Referer": "https://dps.psx.com.pk/",
+}
+
+# All symbols available on dps.psx.com.pk (KSE-100 + common mid-caps)
+_DEFAULT_SYMBOLS = [
+    "ENGRO", "LUCK",  "HBL",  "PSO",   "OGDC",  "PPL",   "MCB",
+    "UBL",   "MARI",  "HUBC", "UNITY", "FFBL",  "PTCL",  "SYS",
+    "TRG",   "EFERT", "FFC",  "MEBL",  "BAHL",  "NBP",   "POL",
+    "SNGPL", "SSGC",  "KAPCO","NCPL",  "DGKC",  "MLCF",  "FCCL",
+    "ACPL",  "CHCC",  "KOHC", "PIOC",  "FABL",  "BAFL",  "SILK",
+    "ATRL",  "APL",   "SHEL", "PSX",   "PAKT",  "GATM",  "COLG",
+]
+
+# Track in-progress fetch to avoid double-triggering
+_fetch_running = False
+
+
+# ---------------------------------------------------------------------------
+# Historical data fetch (background task)
+# ---------------------------------------------------------------------------
+
+async def _fetch_eod_psx(client: httpx.AsyncClient, symbol: str) -> list[dict]:
+    """
+    Fetch complete EOD history for one symbol from dps.psx.com.pk.
+    Returns rows sorted oldest-first, ready for DB insert.
+
+    Response data format (newest-first): [[ts, close, volume, open], ...]
+    high/low are not provided by this endpoint — left as NULL.
+    """
+    url = _PSX_EOD_URL.format(symbol=symbol)
+    try:
+        resp = await client.get(url, timeout=20.0)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as exc:
+        logger.warning("Historical: %s — fetch failed: %s", symbol, exc)
+        return []
+
+    if payload.get("status") != 1 or not payload.get("data"):
+        logger.warning("Historical: %s — empty or error response", symbol)
+        return []
+
+    rows = []
+    for entry in reversed(payload["data"]):   # oldest-first
+        if len(entry) < 4:
+            continue
+        ts, close, volume, open_price = entry[0], entry[1], entry[2], entry[3]
+        rows.append({
+            "symbol":     symbol,
+            "sector":     None,
+            "ldcp":       None,    # back-filled below
+            "open_price": float(open_price),
+            "high":       None,    # not in this endpoint
+            "low":        None,    # not in this endpoint
+            "close":      float(close),
+            "volume":     int(volume),
+            "change_pct": None,    # back-filled below
+            "source":     "historical",
+            "scraped_at": int(ts),
+        })
+
+    # Back-fill ldcp and change_pct now that rows are oldest-first
+    prev_close = None
+    for row in rows:
+        if prev_close is not None:
+            row["ldcp"]       = round(prev_close, 4)
+            row["change_pct"] = round((row["close"] - prev_close) / prev_close * 100, 4)
+        prev_close = row["close"]
+
+    return rows
+
+
+async def _run_historical_fetch(symbols: list[str]) -> None:
+    global _fetch_running
+    _fetch_running = True
+    try:
+        from ..db.models import PriceHistory
+        from ..db.database import get_session
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        total_inserted = 0
+        async with httpx.AsyncClient(headers=_PSX_HEADERS, follow_redirects=True) as client:
+            for symbol in symbols:
+                rows = await _fetch_eod_psx(client, symbol)
+                if not rows:
+                    continue
+
+                # Bulk insert in batches of 500
+                inserted = 0
+                for i in range(0, len(rows), 500):
+                    batch = rows[i:i + 500]
+                    async with get_session() as session:
+                        stmt = (
+                            sqlite_insert(PriceHistory)
+                            .values(batch)
+                            .on_conflict_do_nothing()
+                        )
+                        result = await session.execute(stmt)
+                        inserted += result.rowcount or 0
+
+                total_inserted += inserted
+                logger.info(
+                    "Historical: %s — %d trading days, %d newly inserted",
+                    symbol, len(rows), inserted,
+                )
+                await asyncio.sleep(0.25)
+
+        logger.info(
+            "Historical fetch complete — %d symbols, %d rows newly inserted",
+            len(symbols), total_inserted,
+        )
+    except Exception as exc:
+        logger.error("Historical fetch failed: %s", exc)
+    finally:
+        _fetch_running = False
+
+
+@system_router.post("/fetch-historical")
+async def trigger_historical_fetch(
+    background_tasks: BackgroundTasks,
+    symbols: Optional[str] = Query(None, description="Comma-separated PSX symbols; omit for all known"),
+) -> dict:
+    """
+    Trigger a background job that downloads full EOD history for PSX symbols
+    from dps.psx.com.pk/timeseries/eod/{SYMBOL} and inserts it into price_history.
+
+    Data format from PSX: [unix_timestamp, close, volume, open] per trading day.
+    high/low are not provided by this endpoint and will be NULL in the DB.
+    Rows are inserted with source='historical'; duplicates are silently skipped.
+
+    No external dependencies required — uses httpx (already installed).
+    """
+    global _fetch_running
+    if _fetch_running:
+        return {"status": "already_running", "message": "Historical fetch already in progress."}
+
+    sym_list = [s.strip().upper() for s in symbols.split(",")] if symbols else _DEFAULT_SYMBOLS
+
+    background_tasks.add_task(_run_historical_fetch, sym_list)
+
+    return {
+        "status":  "started",
+        "symbols": len(sym_list),
+        "message": (
+            f"Historical fetch started for {len(sym_list)} symbol(s) from dps.psx.com.pk. "
+            "Full history per symbol is returned in one call — no date range needed. "
+            "Check server logs for progress."
+        ),
+    }
 
 
 @system_router.get("/status")

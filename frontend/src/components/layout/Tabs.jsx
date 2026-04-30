@@ -6,9 +6,10 @@ import clsx from 'clsx'
 import { useUIStore } from '../../store/useUIStore'
 
 const TABS = [
-  { id: 'dashboard', label: '📊 Dashboard' },
-  { id: 'portfolio', label: '💼 Portfolio' },
-  { id: 'backtest',  label: '📈 Backtest' },
+  { id: 'dashboard',   label: '📊 Dashboard' },
+  { id: 'portfolio',   label: '💼 Portfolio' },
+  { id: 'backtest',    label: '📈 Backtest' },
+  { id: 'performance', label: '🎯 Performance' },
 ]
 
 export default function Tabs() {

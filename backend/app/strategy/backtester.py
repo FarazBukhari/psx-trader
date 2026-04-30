@@ -138,7 +138,7 @@ class BacktestResult:
     avg_gain_pct:      float
     avg_loss_pct:      float
     max_drawdown_pct:  float
-    profit_factor:     float
+    profit_factor:     Optional[float]   # None when no losing trades (perfect record)
     sharpe_ratio:      Optional[float]   # NOTE: trade-based Sharpe proxy (not time-normalized)
     trades:            int
     winning_trades:    int
@@ -467,7 +467,7 @@ def _compute_metrics(state: _SimState, config: StrategyConfig) -> dict:
 
     gross_profit  = sum(t.realized_pl for t in wins)
     gross_loss    = abs(sum(t.realized_pl for t in losses))
-    profit_factor = round(gross_profit / gross_loss, 4) if gross_loss > 0 else float("inf")
+    profit_factor = round(gross_profit / gross_loss, 4) if gross_loss > 0 else None
 
     # NOTE: trade-based Sharpe proxy (not time-normalized — each closed trade
     # is treated as one "period"). Useful for relative comparison only.

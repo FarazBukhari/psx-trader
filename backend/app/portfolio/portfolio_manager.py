@@ -273,6 +273,26 @@ class PortfolioManager:
             )
         logger.info("Manual removal: position %s deleted from portfolio #%d", symbol, portfolio_id)
 
+    async def reset_positions(
+        self,
+        portfolio_id: int = DEFAULT_PORTFOLIO_ID,
+    ) -> int:
+        """
+        Delete ALL open positions for the portfolio (no trade records created).
+        Returns the number of positions deleted.
+        Use for testing / reconciliation resets only.
+        """
+        async with get_session() as session:
+            result = await session.execute(
+                delete(Position).where(Position.portfolio_id == portfolio_id)
+            )
+            deleted = result.rowcount
+        logger.warning(
+            "RESET: %d position(s) deleted from portfolio #%d",
+            deleted, portfolio_id,
+        )
+        return deleted
+
     # ──────────────────────────────────────────────────────────────────────
     # Trade execution
     # ──────────────────────────────────────────────────────────────────────

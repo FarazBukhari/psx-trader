@@ -23,7 +23,10 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from sqlalchemy import select, desc
+from ..db.models import PortfolioSnapshot
+from ..db.database import get_session
 
 from ..portfolio.portfolio_manager import (
     PortfolioManager,
@@ -208,6 +211,50 @@ async def remove_position(symbol: str) -> PortfolioSummary:
         return await _pm.get_portfolio(_current_prices())
     except Exception as exc:
         raise _handle_domain_error(exc)
+
+
+@portfolio_router.delete(
+    "/portfolio/reset",
+    summary="Reset all open positions (no trade records created)",
+)
+async def reset_all_positions() -> dict:
+    """
+    Delete ALL open positions without creating trade records.
+    Use for testing / reconciliation resets only.
+    Returns count of positions removed.
+    """
+    try:
+        deleted = await _pm.reset_positions()
+        return {"deleted": deleted, "message": f"Cleared {deleted} position(s)."}
+    except Exception as exc:
+        raise _handle_domain_error(exc)
+
+
+@portfolio_router.get(
+    "/portfolio/snapshots",
+    summary="Portfolio value history (equity curve)",
+)
+async def get_portfolio_snapshots(
+    limit: int = Query(500, ge=1, le=5000),
+) -> dict:
+    """
+    Return historical portfolio value snapshots for the equity curve chart.
+    Sorted oldest-first so the frontend can append new in-memory points.
+    """
+    async with get_session() as session:
+        q = (
+            select(PortfolioSnapshot)
+            .where(PortfolioSnapshot.portfolio_id == 1)
+            .order_by(desc(PortfolioSnapshot.snapshotted_at))
+            .limit(limit)
+        )
+        rows = (await session.execute(q)).scalars().all()
+
+    snapshots = [
+        {"ts": r.snapshotted_at * 1000, "value": r.total_value}
+        for r in reversed(rows)
+    ]
+    return {"snapshots": snapshots, "count": len(snapshots)}
 
 
 # ---------------------------------------------------------------------------

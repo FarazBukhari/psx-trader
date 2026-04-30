@@ -22,7 +22,13 @@ from .api.portfolio_routes import portfolio_router
 from .api.prediction_routes import prediction_router
 from .api.backtest_routes import backtest_router
 from .api.analytics_routes import analytics_router
+from .api.performance_routes import performance_router
 from .analytics.signal_evaluator import evaluate_pending_signals
+from .analytics.forward_tracker import (
+    create_trade_on_signal,
+    recover_open_trades,
+    update_open_trades,
+)
 from .db import init_db
 from .logger import setup_logging
 from .scraper.psx_scraper import PSXScraper
@@ -140,9 +146,19 @@ async def _poll_loop(scraper: PSXScraper):
                 app_state.signals[s["symbol"]] = s
                 # Persist non-HOLD / changed signals regardless of stale status
                 asyncio.create_task(app_state.history_store.save_signal(s))
+                # Forward-test: attempt to open a trade for every live actionable signal.
+                # Deduplication is handled inside create_trade_on_signal (P1: one OPEN
+                # trade per symbol at a time). No signal_changed guard here — that flag
+                # resets on restart and would suppress all trades at startup.
+                if not is_stale and s.get("signal", "").upper() in ("BUY", "SELL", "FORCE_SELL"):
+                    asyncio.create_task(create_trade_on_signal(s))
 
             # Phase 3: log non-neutral predictions to DB (fire-and-forget)
             asyncio.create_task(app_state.prediction_engine.log_predictions(signals))
+
+            # Forward-test: update extremes + check exits for all OPEN trades (P2 needs signals)
+            if not is_stale:
+                asyncio.create_task(update_open_trades(stocks, signals))
 
             app_state.last_update  = time.time()
             app_state.data_source  = first.get("source", "unknown")
@@ -196,6 +212,12 @@ async def lifespan(app: FastAPI):
         await app_state.history_store.warm_price_buffer(price_buffer)
     except Exception as exc:
         logger.warning("Price buffer warm-up failed (non-fatal): %s", exc)
+
+    # ── Step 3b: forward-test recovery — force-close stale OPEN trades ──
+    try:
+        await recover_open_trades()
+    except Exception as exc:
+        logger.warning("Forward-test recovery failed (non-fatal): %s", exc)
 
     scraper = PSXScraper()
     if USE_MOCK:
@@ -267,6 +289,7 @@ app.include_router(portfolio_router)
 app.include_router(prediction_router)
 app.include_router(backtest_router)
 app.include_router(analytics_router)
+app.include_router(performance_router)
 
 
 # ---------------------------------------------------------------------------

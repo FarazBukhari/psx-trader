@@ -265,3 +265,43 @@ class SignalOutcome(Base):
 
     def __repr__(self) -> str:
         return f"<SignalOutcome {self.symbol} {self.signal} @ {self.timestamp} short={self.outcome_short}>"
+
+
+# ---------------------------------------------------------------------------
+# ForwardTrade  (forward-testing engine — tracks signal performance live)
+# ---------------------------------------------------------------------------
+
+class ForwardTrade(Base):
+    __tablename__ = "forward_trades"
+
+    id              : Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol          : Mapped[str]            = mapped_column(String(16), nullable=False, index=True)
+    signal          : Mapped[str]            = mapped_column(String(16), nullable=False)   # BUY|SELL|FORCE_SELL
+    entry_price     : Mapped[float]          = mapped_column(Float, nullable=False)
+    entry_time      : Mapped[int]            = mapped_column(Integer, nullable=False)      # Unix ts
+
+    # Real-time extremes — updated every tick while OPEN
+    max_price_seen  : Mapped[float]          = mapped_column(Float, nullable=False)
+    min_price_seen  : Mapped[float]          = mapped_column(Float, nullable=False)
+
+    # Exit fields (NULL while OPEN)
+    exit_price      : Mapped[Optional[float]]= mapped_column(Float)
+    exit_time       : Mapped[Optional[int]]  = mapped_column(Integer)
+
+    # Status / outcome
+    status          : Mapped[str]            = mapped_column(String(8),  nullable=False, default="OPEN")   # OPEN|CLOSED
+    outcome         : Mapped[str]            = mapped_column(String(8),  nullable=False, default="NEUTRAL") # WIN|LOSS|NEUTRAL
+
+    # Metrics — finalised on close; 0.0 while OPEN
+    mfe_pct         : Mapped[float]          = mapped_column(Float, nullable=False, default=0.0)  # max favourable excursion
+    mae_pct         : Mapped[float]          = mapped_column(Float, nullable=False, default=0.0)  # max adverse excursion
+    duration_minutes: Mapped[float]          = mapped_column(Float, nullable=False, default=0.0)  # (exit_time - entry_time) / 60
+
+    __table_args__ = (
+        UniqueConstraint("symbol", "entry_time", name="uq_ft_symbol_entry_time"),
+        Index("ix_ft_symbol_status", "symbol", "status"),
+        Index("ix_ft_entry_time",    "entry_time"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<ForwardTrade {self.signal} {self.symbol} @ {self.entry_price} [{self.status}]>"
