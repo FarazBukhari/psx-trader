@@ -21,6 +21,8 @@ from .api.system_routes import system_router
 from .api.portfolio_routes import portfolio_router
 from .api.prediction_routes import prediction_router
 from .api.backtest_routes import backtest_router
+from .api.analytics_routes import analytics_router
+from .analytics.signal_evaluator import evaluate_pending_signals
 from .db import init_db
 from .logger import setup_logging
 from .scraper.psx_scraper import PSXScraper
@@ -37,10 +39,11 @@ logger = logging.getLogger("psx.main")
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-POLL_INTERVAL     = int(os.getenv("PSX_POLL_INTERVAL", "15"))
-USE_MOCK          = os.getenv("PSX_MOCK", "false").lower() == "true"
-STRATEGY_PATH     = Path(__file__).parent.parent.parent.parent / "config" / "strategy.json"
-SNAPSHOT_INTERVAL = int(os.getenv("PSX_SNAPSHOT_INTERVAL", "300"))   # portfolio snapshot every 5 min
+POLL_INTERVAL      = int(os.getenv("PSX_POLL_INTERVAL", "15"))
+USE_MOCK           = os.getenv("PSX_MOCK", "false").lower() == "true"
+STRATEGY_PATH      = Path(__file__).parent.parent.parent.parent / "config" / "strategy.json"
+SNAPSHOT_INTERVAL  = int(os.getenv("PSX_SNAPSHOT_INTERVAL", "300"))   # portfolio snapshot every 5 min
+EVALUATOR_INTERVAL = int(os.getenv("PSX_EVALUATOR_INTERVAL", "600"))  # signal evaluation every 10 min
 
 # ---------------------------------------------------------------------------
 # Background: strategy.json file watcher
@@ -90,6 +93,21 @@ async def _portfolio_snapshot_loop():
             await app_state.portfolio.take_snapshot(prices)
         except Exception as exc:
             logger.warning("Portfolio snapshot failed (non-fatal): %s", exc)
+
+
+async def _signal_evaluation_loop():
+    """Periodically evaluate historical signals against forward price data."""
+    logger.info("Signal evaluation loop started — interval: %ds", EVALUATOR_INTERVAL)
+    # Stagger first run by 60s so the app finishes warm-up before hitting the DB
+    await asyncio.sleep(60)
+    while True:
+        try:
+            inserted = await evaluate_pending_signals()
+            if inserted:
+                logger.info("Signal evaluator: %d new outcomes persisted", inserted)
+        except Exception as exc:
+            logger.warning("Signal evaluation failed (non-fatal): %s", exc)
+        await asyncio.sleep(EVALUATOR_INTERVAL)
 
 
 async def _poll_loop(scraper: PSXScraper):
@@ -201,9 +219,10 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Live warm-up failed: %s", exc)
 
-    poll_task     = asyncio.create_task(_poll_loop(scraper))
-    watch_task    = asyncio.create_task(_watch_strategy())
-    snapshot_task = asyncio.create_task(_portfolio_snapshot_loop())
+    poll_task      = asyncio.create_task(_poll_loop(scraper))
+    watch_task     = asyncio.create_task(_watch_strategy())
+    snapshot_task  = asyncio.create_task(_portfolio_snapshot_loop())
+    evaluator_task = asyncio.create_task(_signal_evaluation_loop())
 
     yield
 
@@ -218,6 +237,7 @@ async def lifespan(app: FastAPI):
     poll_task.cancel()
     watch_task.cancel()
     snapshot_task.cancel()
+    evaluator_task.cancel()
     await scraper.close()
     logger.info("Server shutdown — goodbye")
 
@@ -246,6 +266,7 @@ app.include_router(system_router)
 app.include_router(portfolio_router)
 app.include_router(prediction_router)
 app.include_router(backtest_router)
+app.include_router(analytics_router)
 
 
 # ---------------------------------------------------------------------------

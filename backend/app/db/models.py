@@ -9,6 +9,7 @@ Table index:
   - Trade               : immutable ledger of every executed BUY/SELL
   - PortfolioSnapshot   : periodic snapshots for P&L charting over time
   - PredictionLog       : prediction outcomes tracked for accuracy feedback
+  - SignalOutcome        : validated signal outcomes across short/medium/long horizons
 """
 
 from __future__ import annotations
@@ -220,3 +221,47 @@ class PredictionLog(Base):
     __table_args__ = (
         Index("ix_pred_symbol_time", "symbol", "predicted_at"),
     )
+
+
+# ---------------------------------------------------------------------------
+# SignalOutcome  (Signal Validation Engine results — immutable once evaluated)
+# ---------------------------------------------------------------------------
+
+class SignalOutcome(Base):
+    __tablename__ = "signal_outcomes"
+
+    id              : Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol          : Mapped[str]            = mapped_column(String(16), nullable=False, index=True)
+    signal          : Mapped[str]            = mapped_column(String(16), nullable=False)        # BUY|SELL|HOLD|FORCE_SELL
+    signal_sources  : Mapped[Optional[str]]  = mapped_column(Text)                             # JSON string from signals_log
+    timestamp       : Mapped[int]            = mapped_column(Integer, nullable=False)           # signal generated_at (Unix ts)
+
+    # Prices
+    price_at_signal : Mapped[Optional[float]]= mapped_column(Float)   # last price <= signal time
+    price_short     : Mapped[Optional[float]]= mapped_column(Float)   # first price >= signal+30m
+    price_medium    : Mapped[Optional[float]]= mapped_column(Float)   # first price >= signal+2h
+    price_long      : Mapped[Optional[float]]= mapped_column(Float)   # session-based (see evaluator)
+
+    # Outcomes: "correct" | "incorrect" | "neutral" | NULL (not yet resolved)
+    # NULL means the horizon's price data has not yet arrived — filled progressively.
+    outcome_short   : Mapped[Optional[str]]  = mapped_column(String(16))
+    outcome_medium  : Mapped[Optional[str]]  = mapped_column(String(16))
+    outcome_long    : Mapped[Optional[str]]  = mapped_column(String(16))
+
+    # Latency: seconds between target horizon timestamp and the actual scraped_at found.
+    # Measures data freshness / execution realism. NULL if price not yet available.
+    short_latency_sec  : Mapped[Optional[int]] = mapped_column(Integer)
+    medium_latency_sec : Mapped[Optional[int]] = mapped_column(Integer)
+    long_latency_sec   : Mapped[Optional[int]] = mapped_column(Integer)
+
+    evaluated_at    : Mapped[int]            = mapped_column(Integer, nullable=False, default=lambda: int(time.time()))
+
+    __table_args__ = (
+        UniqueConstraint("symbol", "timestamp", name="uq_signal_outcome_symbol_ts"),
+        Index("ix_so_symbol_time",  "symbol",  "timestamp"),
+        Index("ix_so_signal",       "signal"),
+        Index("ix_so_evaluated_at", "evaluated_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<SignalOutcome {self.symbol} {self.signal} @ {self.timestamp} short={self.outcome_short}>"
