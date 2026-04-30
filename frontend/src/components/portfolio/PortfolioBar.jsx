@@ -4,6 +4,7 @@
 
 import clsx from 'clsx'
 import Loader from '../common/Loader'
+import { useMarketStore } from '../../store/useMarketStore'
 
 function PLValue({ value, pct }) {
   if (value == null) return <span className="text-gray-600">—</span>
@@ -35,6 +36,8 @@ function Stat({ label, value, className, children }) {
 }
 
 export default function PortfolioBar({ portfolio, loading }) {
+  const signals = useMarketStore((s) => s.signals)
+
   if (loading && !portfolio) {
     return (
       <div className="bg-gray-900 border border-gray-800 rounded-lg px-5 py-3">
@@ -50,14 +53,38 @@ export default function PortfolioBar({ portfolio, loading }) {
       ? n.toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '—'
 
+  // Build live price map from WebSocket feed
+  const livePrice = {}
+  signals.forEach((s) => { if (s.current != null) livePrice[s.symbol] = s.current })
+
+  // Recalculate totals using live prices where available
+  const positions = p.positions || []
+  let liveEquity = 0
+  let liveUnrealizedPL = 0
+  positions.forEach((pos) => {
+    const live = livePrice[pos.symbol]
+    if (live != null) {
+      liveEquity       += live * pos.shares
+      liveUnrealizedPL += (live - pos.avg_buy_price) * pos.shares
+    } else {
+      liveEquity       += pos.current_value   ?? (pos.avg_buy_price * pos.shares)
+      liveUnrealizedPL += pos.unrealized_pl   ?? 0
+    }
+  })
+
+  const liveTotalValue = p.cash_available + liveEquity
+  const liveTotalPL    = liveUnrealizedPL + (p.realized_pl ?? 0)
+  const costBasis      = positions.reduce((s, pos) => s + pos.avg_buy_price * pos.shares, 0)
+  const liveTotalPLPct = costBasis > 0 ? (liveTotalPL / costBasis) * 100 : null
+
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg px-5 py-3 flex flex-wrap gap-6 items-center">
-      <Stat label="Portfolio Value" value={`PKR ${fmt(p.total_portfolio_value)}`} className="text-white text-base" />
+      <Stat label="Portfolio Value" value={`PKR ${fmt(liveTotalValue)}`} className="text-white text-base" />
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
       <Stat label="Cash Available" value={`PKR ${fmt(p.cash_available)}`} />
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
       <Stat label="Unrealized P&L">
-        <PLValue value={p.unrealized_pl} />
+        <PLValue value={liveUnrealizedPL} />
       </Stat>
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
       <Stat label="Realized P&L">
@@ -65,7 +92,7 @@ export default function PortfolioBar({ portfolio, loading }) {
       </Stat>
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
       <Stat label="Total P&L">
-        <PLValue value={p.total_pl} pct={p.total_pl_pct} />
+        <PLValue value={liveTotalPL} pct={liveTotalPLPct} />
       </Stat>
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
       <Stat label="Positions" value={p.position_count ?? 0} />

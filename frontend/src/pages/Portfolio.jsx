@@ -16,8 +16,12 @@ export default function Portfolio() {
   const loading   = usePortfolioStore((s) => s.loading)
   const error     = usePortfolioStore((s) => s.error)
 
-  // Fetch on mount
-  useEffect(() => { fetch() }, [fetch])
+  // Fetch on mount, then auto-refresh every 30s to keep realized P&L current
+  useEffect(() => {
+    fetch()
+    const id = setInterval(fetch, 30_000)
+    return () => clearInterval(id)
+  }, [fetch])
 
   return (
     <div className="px-5 py-5 space-y-5 max-w-screen-2xl mx-auto w-full">

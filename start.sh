@@ -65,7 +65,7 @@ fi
 echo
 
 # ── Env ─────────────────────────────────────────────────────────────────────
-export PSX_POLL_INTERVAL=15
+export PSX_POLL_INTERVAL=5
 if [[ "$*" == *--mock* ]]; then
   export PSX_MOCK=true
   echo "⚠️   MOCK mode — using simulated prices"

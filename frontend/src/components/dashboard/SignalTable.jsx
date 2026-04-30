@@ -284,7 +284,7 @@ export default function SignalTable() {
                 : 'text-gray-300'
 
               const isHighConf   = (pred?.confidence ?? 0) >= 0.7
-              const isHighRisk   = risk === 'HIGH'
+              const isHighRisk   = pred?.risk_level === 'HIGH'
               const isStrongBuy  = s.signal === 'BUY'  && isHighConf
               const isStrongSell = (s.signal === 'SELL' || s.signal === 'FORCE_SELL') && isHighConf
 

@@ -1,18 +1,2681 @@
 {
-  "_comment": "PSX Short-Term Strategy — auto-refreshed 2026-04-29. Source: live. Levels: 2.5%/4%/4.5% from market open prices.",
+  "_comment": "PSX Short-Term Strategy \u2014 auto-refreshed 2026-04-30 06:02 PKT. Levels: 2.5%/4.0%/4.5% from open prices.",
   "symbols": {
-    "LOADS":    { "buy_below":  14.28, "sell_above":  15.24, "stop_loss":  13.99 },
-    "BOP":      { "buy_below":  33.97, "sell_above":  36.23, "stop_loss":  33.27 },
-    "PAEL":     { "buy_below":  38.52, "sell_above":  41.09, "stop_loss":  37.73 },
-    "BECO":     { "buy_below":   5.50, "sell_above":   5.87, "stop_loss":   5.39 },
-    "NBP":      { "buy_below": 191.34, "sell_above": 204.15, "stop_loss": 187.47 },
-    "TBL":      { "buy_below":   9.32, "sell_above":   9.94, "stop_loss":   9.13 },
-    "ASL":      { "buy_below":  11.81, "sell_above":  12.59, "stop_loss":  11.58 },
-    "BAFL":     { "buy_below":  58.51, "sell_above":  62.41, "stop_loss":  57.31 },
-    "DGKC":     { "buy_below": 168.58, "sell_above": 179.92, "stop_loss": 165.22 },
-    "FCCL":     { "buy_below":  46.79, "sell_above":  49.91, "stop_loss":  45.83 },
-    "AGHA":     { "buy_below":   7.53, "sell_above":   8.03, "stop_loss":   7.37 },
-    "HCAR":     { "buy_below": 214.35, "sell_above": 228.64, "stop_loss": 209.82 }
+    "AGTL": {
+      "buy_below": 354.03,
+      "sell_above": 377.63,
+      "stop_loss": 346.77
+    },
+    "ATLH": {
+      "buy_below": 1677.0,
+      "sell_above": 1788.8,
+      "stop_loss": 1642.6
+    },
+    "DFML": {
+      "buy_below": 16.79,
+      "sell_above": 17.91,
+      "stop_loss": 16.45
+    },
+    "GAL": {
+      "buy_below": 414.38,
+      "sell_above": 442.0,
+      "stop_loss": 405.88
+    },
+    "GHNI": {
+      "buy_below": 779.99,
+      "sell_above": 831.99,
+      "stop_loss": 763.99
+    },
+    "HINO": {
+      "buy_below": 316.38,
+      "sell_above": 337.47,
+      "stop_loss": 309.89
+    },
+    "HCAR": {
+      "buy_below": 213.53,
+      "sell_above": 227.76,
+      "stop_loss": 209.14
+    },
+    "INDU": {
+      "buy_below": 2020.19,
+      "sell_above": 2154.87,
+      "stop_loss": 1978.75
+    },
+    "MTL": {
+      "buy_below": 520.45,
+      "sell_above": 555.15,
+      "stop_loss": 509.78
+    },
+    "SAZEW": {
+      "buy_below": 1930.5,
+      "sell_above": 2059.2,
+      "stop_loss": 1890.9
+    },
+    "AGIL": {
+      "buy_below": 164.78,
+      "sell_above": 175.76,
+      "stop_loss": 161.39
+    },
+    "ATBA": {
+      "buy_below": 218.9,
+      "sell_above": 233.49,
+      "stop_loss": 214.41
+    },
+    "BWHL": {
+      "buy_below": 194.03,
+      "sell_above": 206.96,
+      "stop_loss": 190.04
+    },
+    "BELA": {
+      "buy_below": 71.17,
+      "sell_above": 75.92,
+      "stop_loss": 69.72
+    },
+    "DWAE": {
+      "buy_below": 21.44,
+      "sell_above": 22.87,
+      "stop_loss": 21.0
+    },
+    "EXIDE": {
+      "buy_below": 521.62,
+      "sell_above": 556.4,
+      "stop_loss": 510.92
+    },
+    "GTYR": {
+      "buy_below": 28.53,
+      "sell_above": 30.43,
+      "stop_loss": 27.94
+    },
+    "LOADS": {
+      "buy_below": 13.15,
+      "sell_above": 14.03,
+      "stop_loss": 12.88
+    },
+    "PTL": {
+      "buy_below": 53.41,
+      "sell_above": 56.97,
+      "stop_loss": 52.31
+    },
+    "THALL": {
+      "buy_below": 608.23,
+      "sell_above": 648.78,
+      "stop_loss": 595.76
+    },
+    "TBL": {
+      "buy_below": 8.97,
+      "sell_above": 9.57,
+      "stop_loss": 8.79
+    },
+    "EMCO": {
+      "buy_below": 41.15,
+      "sell_above": 43.9,
+      "stop_loss": 40.31
+    },
+    "FCL": {
+      "buy_below": 21.35,
+      "sell_above": 22.78,
+      "stop_loss": 20.91
+    },
+    "PAEL": {
+      "buy_below": 37.53,
+      "sell_above": 40.03,
+      "stop_loss": 36.76
+    },
+    "PCAL": {
+      "buy_below": 139.42,
+      "sell_above": 148.72,
+      "stop_loss": 136.56
+    },
+    "SIEM": {
+      "buy_below": 1478.1,
+      "sell_above": 1576.64,
+      "stop_loss": 1447.78
+    },
+    "WAVES": {
+      "buy_below": 9.52,
+      "sell_above": 10.15,
+      "stop_loss": 9.32
+    },
+    "WAVESAPP": {
+      "buy_below": 7.75,
+      "sell_above": 8.27,
+      "stop_loss": 7.59
+    },
+    "ACPL": {
+      "buy_below": 216.45,
+      "sell_above": 230.88,
+      "stop_loss": 212.01
+    },
+    "BWCL": {
+      "buy_below": 434.85,
+      "sell_above": 463.84,
+      "stop_loss": 425.93
+    },
+    "CHCC": {
+      "buy_below": 263.25,
+      "sell_above": 280.8,
+      "stop_loss": 257.85
+    },
+    "DGKC": {
+      "buy_below": 170.62,
+      "sell_above": 182.0,
+      "stop_loss": 167.12
+    },
+    "DBCI": {
+      "buy_below": 6.81,
+      "sell_above": 7.26,
+      "stop_loss": 6.67
+    },
+    "DNCC": {
+      "buy_below": 14.75,
+      "sell_above": 15.74,
+      "stop_loss": 14.45
+    },
+    "DCL": {
+      "buy_below": 8.86,
+      "sell_above": 9.45,
+      "stop_loss": 8.68
+    },
+    "FCCL": {
+      "buy_below": 46.7,
+      "sell_above": 49.82,
+      "stop_loss": 45.74
+    },
+    "FECTC": {
+      "buy_below": 87.26,
+      "sell_above": 93.08,
+      "stop_loss": 85.47
+    },
+    "FLYNG": {
+      "buy_below": 39.98,
+      "sell_above": 42.64,
+      "stop_loss": 39.16
+    },
+    "GWLC": {
+      "buy_below": 42.89,
+      "sell_above": 45.75,
+      "stop_loss": 42.01
+    },
+    "KOHC": {
+      "buy_below": 80.92,
+      "sell_above": 86.32,
+      "stop_loss": 79.27
+    },
+    "LUCK": {
+      "buy_below": 403.59,
+      "sell_above": 430.5,
+      "stop_loss": 395.31
+    },
+    "MLCF": {
+      "buy_below": 77.27,
+      "sell_above": 82.42,
+      "stop_loss": 75.68
+    },
+    "PIOC": {
+      "buy_below": 213.53,
+      "sell_above": 227.76,
+      "stop_loss": 209.14
+    },
+    "POWERPS": {
+      "buy_below": 25.02,
+      "sell_above": 26.69,
+      "stop_loss": 24.51
+    },
+    "POWER": {
+      "buy_below": 17.79,
+      "sell_above": 18.98,
+      "stop_loss": 17.43
+    },
+    "SMCPL": {
+      "buy_below": 39.96,
+      "sell_above": 42.62,
+      "stop_loss": 39.14
+    },
+    "THCCL": {
+      "buy_below": 53.92,
+      "sell_above": 57.51,
+      "stop_loss": 52.81
+    },
+    "ARPL": {
+      "buy_below": 386.1,
+      "sell_above": 411.84,
+      "stop_loss": 378.18
+    },
+    "BAPL": {
+      "buy_below": 42.41,
+      "sell_above": 45.24,
+      "stop_loss": 41.54
+    },
+    "BERG": {
+      "buy_below": 87.43,
+      "sell_above": 93.26,
+      "stop_loss": 85.63
+    },
+    "BIFO": {
+      "buy_below": 108.22,
+      "sell_above": 115.44,
+      "stop_loss": 106.0
+    },
+    "BUXL": {
+      "buy_below": 144.87,
+      "sell_above": 154.52,
+      "stop_loss": 141.89
+    },
+    "DAAG": {
+      "buy_below": 54.65,
+      "sell_above": 58.29,
+      "stop_loss": 53.53
+    },
+    "DOL": {
+      "buy_below": 25.3,
+      "sell_above": 26.99,
+      "stop_loss": 24.78
+    },
+    "DYNO": {
+      "buy_below": 303.22,
+      "sell_above": 323.44,
+      "stop_loss": 297.0
+    },
+    "EPCLPS": {
+      "buy_below": 11.93,
+      "sell_above": 12.73,
+      "stop_loss": 11.69
+    },
+    "EPCL": {
+      "buy_below": 31.0,
+      "sell_above": 33.07,
+      "stop_loss": 30.37
+    },
+    "GCIL": {
+      "buy_below": 28.61,
+      "sell_above": 30.51,
+      "stop_loss": 28.02
+    },
+    "GCWL": {
+      "buy_below": 15.75,
+      "sell_above": 16.8,
+      "stop_loss": 15.42
+    },
+    "GGL": {
+      "buy_below": 18.03,
+      "sell_above": 19.23,
+      "stop_loss": 17.66
+    },
+    "ICL": {
+      "buy_below": 144.3,
+      "sell_above": 153.92,
+      "stop_loss": 141.34
+    },
+    "LPGL": {
+      "buy_below": 75.08,
+      "sell_above": 80.08,
+      "stop_loss": 73.53
+    },
+    "LOTCHEM": {
+      "buy_below": 25.38,
+      "sell_above": 27.07,
+      "stop_loss": 24.86
+    },
+    "LCI": {
+      "buy_below": 227.17,
+      "sell_above": 242.31,
+      "stop_loss": 222.51
+    },
+    "NRSL": {
+      "buy_below": 33.2,
+      "sell_above": 35.41,
+      "stop_loss": 32.52
+    },
+    "PAKOXY": {
+      "buy_below": 265.23,
+      "sell_above": 282.91,
+      "stop_loss": 259.79
+    },
+    "SARC": {
+      "buy_below": 67.28,
+      "sell_above": 71.77,
+      "stop_loss": 65.9
+    },
+    "SITC": {
+      "buy_below": 851.17,
+      "sell_above": 907.92,
+      "stop_loss": 833.71
+    },
+    "SPL": {
+      "buy_below": 71.66,
+      "sell_above": 76.44,
+      "stop_loss": 70.19
+    },
+    "WAHN": {
+      "buy_below": 255.45,
+      "sell_above": 272.48,
+      "stop_loss": 250.21
+    },
+    "HGFA": {
+      "buy_below": 15.0,
+      "sell_above": 16.0,
+      "stop_loss": 14.69
+    },
+    "HIFA": {
+      "buy_below": 4.69,
+      "sell_above": 5.0,
+      "stop_loss": 4.59
+    },
+    "TSMF": {
+      "buy_below": 14.28,
+      "sell_above": 15.24,
+      "stop_loss": 13.99
+    },
+    "ABL": {
+      "buy_below": 175.89,
+      "sell_above": 187.62,
+      "stop_loss": 172.28
+    },
+    "AKBL": {
+      "buy_below": 87.65,
+      "sell_above": 93.5,
+      "stop_loss": 85.85
+    },
+    "BOP": {
+      "buy_below": 33.03,
+      "sell_above": 35.24,
+      "stop_loss": 32.36
+    },
+    "BAFL": {
+      "buy_below": 57.52,
+      "sell_above": 61.36,
+      "stop_loss": 56.34
+    },
+    "BAHL": {
+      "buy_below": 165.8,
+      "sell_above": 176.85,
+      "stop_loss": 162.4
+    },
+    "BML": {
+      "buy_below": 54.62,
+      "sell_above": 58.26,
+      "stop_loss": 53.5
+    },
+    "BOK": {
+      "buy_below": 31.21,
+      "sell_above": 33.29,
+      "stop_loss": 30.57
+    },
+    "BIPL": {
+      "buy_below": 24.37,
+      "sell_above": 25.99,
+      "stop_loss": 23.87
+    },
+    "FABL": {
+      "buy_below": 84.53,
+      "sell_above": 90.17,
+      "stop_loss": 82.8
+    },
+    "HBL": {
+      "buy_below": 279.82,
+      "sell_above": 298.48,
+      "stop_loss": 274.08
+    },
+    "HMB": {
+      "buy_below": 112.32,
+      "sell_above": 119.81,
+      "stop_loss": 110.02
+    },
+    "JSBL": {
+      "buy_below": 13.15,
+      "sell_above": 14.03,
+      "stop_loss": 12.88
+    },
+    "MCB": {
+      "buy_below": 389.02,
+      "sell_above": 414.96,
+      "stop_loss": 381.04
+    },
+    "MEBL": {
+      "buy_below": 477.74,
+      "sell_above": 509.59,
+      "stop_loss": 467.94
+    },
+    "NBP": {
+      "buy_below": 177.55,
+      "sell_above": 189.38,
+      "stop_loss": 173.91
+    },
+    "SBL": {
+      "buy_below": 9.37,
+      "sell_above": 9.99,
+      "stop_loss": 9.18
+    },
+    "SNBL": {
+      "buy_below": 19.23,
+      "sell_above": 20.51,
+      "stop_loss": 18.83
+    },
+    "SCBPL": {
+      "buy_below": 56.12,
+      "sell_above": 59.86,
+      "stop_loss": 54.97
+    },
+    "UBL": {
+      "buy_below": 370.51,
+      "sell_above": 395.21,
+      "stop_loss": 362.91
+    },
+    "AGHA": {
+      "buy_below": 7.31,
+      "sell_above": 7.8,
+      "stop_loss": 7.16
+    },
+    "ASLPS": {
+      "buy_below": 14.72,
+      "sell_above": 15.7,
+      "stop_loss": 14.42
+    },
+    "ASL": {
+      "buy_below": 11.32,
+      "sell_above": 12.07,
+      "stop_loss": 11.09
+    },
+    "ASTL": {
+      "buy_below": 15.37,
+      "sell_above": 16.39,
+      "stop_loss": 15.05
+    },
+    "BECO": {
+      "buy_below": 5.33,
+      "sell_above": 5.69,
+      "stop_loss": 5.22
+    },
+    "BCL": {
+      "buy_below": 64.34,
+      "sell_above": 68.63,
+      "stop_loss": 63.02
+    },
+    "CSAP": {
+      "buy_below": 84.73,
+      "sell_above": 90.38,
+      "stop_loss": 82.99
+    },
+    "DADX": {
+      "buy_below": 54.11,
+      "sell_above": 57.72,
+      "stop_loss": 53.0
+    },
+    "DSL": {
+      "buy_below": 6.21,
+      "sell_above": 6.62,
+      "stop_loss": 6.08
+    },
+    "INIL": {
+      "buy_below": 157.94,
+      "sell_above": 168.47,
+      "stop_loss": 154.7
+    },
+    "ISL": {
+      "buy_below": 75.07,
+      "sell_above": 80.07,
+      "stop_loss": 73.53
+    },
+    "ITTEFAQ": {
+      "buy_below": 7.72,
+      "sell_above": 8.24,
+      "stop_loss": 7.56
+    },
+    "KSBP": {
+      "buy_below": 183.42,
+      "sell_above": 195.64,
+      "stop_loss": 179.65
+    },
+    "MSCL": {
+      "buy_below": 33.16,
+      "sell_above": 35.37,
+      "stop_loss": 32.48
+    },
+    "MUGHAL": {
+      "buy_below": 69.22,
+      "sell_above": 73.84,
+      "stop_loss": 67.8
+    },
+    "MUGHALC": {
+      "buy_below": 59.48,
+      "sell_above": 63.44,
+      "stop_loss": 58.25
+    },
+    "PECO": {
+      "buy_below": 604.49,
+      "sell_above": 644.79,
+      "stop_loss": 592.09
+    },
+    "ACIETF": {
+      "buy_below": 15.41,
+      "sell_above": 16.43,
+      "stop_loss": 15.09
+    },
+    "HBLTETF": {
+      "buy_below": 109.1,
+      "sell_above": 116.38,
+      "stop_loss": 106.86
+    },
+    "JSGBETF": {
+      "buy_below": 36.9,
+      "sell_above": 39.36,
+      "stop_loss": 36.15
+    },
+    "JSMFETF": {
+      "buy_below": 10.04,
+      "sell_above": 10.71,
+      "stop_loss": 9.84
+    },
+    "MIIETF": {
+      "buy_below": 16.18,
+      "sell_above": 17.25,
+      "stop_loss": 15.84
+    },
+    "MZNPETF": {
+      "buy_below": 19.93,
+      "sell_above": 21.26,
+      "stop_loss": 19.52
+    },
+    "NBPGETF": {
+      "buy_below": 29.29,
+      "sell_above": 31.24,
+      "stop_loss": 28.69
+    },
+    "NITGETF": {
+      "buy_below": 35.47,
+      "sell_above": 37.84,
+      "stop_loss": 34.74
+    },
+    "UBLPETF": {
+      "buy_below": 38.49,
+      "sell_above": 41.06,
+      "stop_loss": 37.7
+    },
+    "AGL": {
+      "buy_below": 45.82,
+      "sell_above": 48.88,
+      "stop_loss": 44.88
+    },
+    "AHCL": {
+      "buy_below": 13.65,
+      "sell_above": 14.56,
+      "stop_loss": 13.37
+    },
+    "EFERT": {
+      "buy_below": 195.0,
+      "sell_above": 208.0,
+      "stop_loss": 191.0
+    },
+    "FATIMA": {
+      "buy_below": 130.94,
+      "sell_above": 139.67,
+      "stop_loss": 128.26
+    },
+    "FFC": {
+      "buy_below": 498.22,
+      "sell_above": 531.44,
+      "stop_loss": 488.0
+    },
+    "ASC": {
+      "buy_below": 9.96,
+      "sell_above": 10.63,
+      "stop_loss": 9.76
+    },
+    "PREMA": {
+      "buy_below": 32.85,
+      "sell_above": 35.04,
+      "stop_loss": 32.17
+    },
+    "BFAGRO": {
+      "buy_below": 34.12,
+      "sell_above": 36.4,
+      "stop_loss": 33.42
+    },
+    "BBFL": {
+      "buy_below": 41.2,
+      "sell_above": 43.95,
+      "stop_loss": 40.36
+    },
+    "BNL": {
+      "buy_below": 8.24,
+      "sell_above": 8.79,
+      "stop_loss": 8.07
+    },
+    "CLOV": {
+      "buy_below": 8.09,
+      "sell_above": 8.63,
+      "stop_loss": 7.93
+    },
+    "COLG": {
+      "buy_below": 1082.24,
+      "sell_above": 1154.39,
+      "stop_loss": 1060.04
+    },
+    "FFL": {
+      "buy_below": 16.39,
+      "sell_above": 17.48,
+      "stop_loss": 16.05
+    },
+    "FCEPL": {
+      "buy_below": 88.72,
+      "sell_above": 94.64,
+      "stop_loss": 86.91
+    },
+    "GDL": {
+      "buy_below": 19.76,
+      "sell_above": 21.08,
+      "stop_loss": 19.36
+    },
+    "ISIL": {
+      "buy_below": 1857.14,
+      "sell_above": 1980.95,
+      "stop_loss": 1819.05
+    },
+    "MFL": {
+      "buy_below": 51.13,
+      "sell_above": 54.54,
+      "stop_loss": 50.08
+    },
+    "MFFL": {
+      "buy_below": 153.07,
+      "sell_above": 163.28,
+      "stop_loss": 149.94
+    },
+    "MUREB": {
+      "buy_below": 897.7,
+      "sell_above": 957.55,
+      "stop_loss": 879.29
+    },
+    "NATF": {
+      "buy_below": 367.57,
+      "sell_above": 392.08,
+      "stop_loss": 360.03
+    },
+    "NESTLE": {
+      "buy_below": 7263.74,
+      "sell_above": 7747.99,
+      "stop_loss": 7114.74
+    },
+    "QUICE": {
+      "buy_below": 22.21,
+      "sell_above": 23.69,
+      "stop_loss": 21.75
+    },
+    "RMPL": {
+      "buy_below": 9256.65,
+      "sell_above": 9873.76,
+      "stop_loss": 9066.77
+    },
+    "SHEZ": {
+      "buy_below": 224.49,
+      "sell_above": 239.46,
+      "stop_loss": 219.89
+    },
+    "TOMCL": {
+      "buy_below": 31.2,
+      "sell_above": 33.28,
+      "stop_loss": 30.56
+    },
+    "TREET": {
+      "buy_below": 23.13,
+      "sell_above": 24.67,
+      "stop_loss": 22.65
+    },
+    "UPFL": {
+      "buy_below": 24872.25,
+      "sell_above": 26530.4,
+      "stop_loss": 24362.05
+    },
+    "UNITY": {
+      "buy_below": 11.94,
+      "sell_above": 12.74,
+      "stop_loss": 11.7
+    },
+    "ZIL": {
+      "buy_below": 311.0,
+      "sell_above": 331.73,
+      "stop_loss": 304.62
+    },
+    "AICL-MAYB": {
+      "buy_below": 73.83,
+      "sell_above": 78.75,
+      "stop_loss": 72.31
+    },
+    "AGHA-MAY": {
+      "buy_below": 7.27,
+      "sell_above": 7.76,
+      "stop_loss": 7.12
+    },
+    "AIRLINK-MAY": {
+      "buy_below": 130.46,
+      "sell_above": 139.16,
+      "stop_loss": 127.79
+    },
+    "ASL-MAY": {
+      "buy_below": 11.51,
+      "sell_above": 12.28,
+      "stop_loss": 11.28
+    },
+    "AKBL-MAY": {
+      "buy_below": 87.75,
+      "sell_above": 93.6,
+      "stop_loss": 85.95
+    },
+    "PREMA-MAY": {
+      "buy_below": 33.15,
+      "sell_above": 35.36,
+      "stop_loss": 32.47
+    },
+    "ATRL-MAY": {
+      "buy_below": 906.75,
+      "sell_above": 967.2,
+      "stop_loss": 888.15
+    },
+    "AVN-MAY": {
+      "buy_below": 31.49,
+      "sell_above": 33.59,
+      "stop_loss": 30.85
+    },
+    "BOP-MAYB": {
+      "buy_below": 33.15,
+      "sell_above": 35.36,
+      "stop_loss": 32.47
+    },
+    "BAHL-MAYB": {
+      "buy_below": 165.75,
+      "sell_above": 176.8,
+      "stop_loss": 162.35
+    },
+    "BML-MAY": {
+      "buy_below": 54.31,
+      "sell_above": 57.93,
+      "stop_loss": 53.19
+    },
+    "BIPL-MAYB": {
+      "buy_below": 24.31,
+      "sell_above": 25.93,
+      "stop_loss": 23.81
+    },
+    "BNL-MAY": {
+      "buy_below": 8.02,
+      "sell_above": 8.56,
+      "stop_loss": 7.86
+    },
+    "CPHL-MAY": {
+      "buy_below": 75.08,
+      "sell_above": 80.08,
+      "stop_loss": 73.53
+    },
+    "CNERGY-MAY": {
+      "buy_below": 8.0,
+      "sell_above": 8.54,
+      "stop_loss": 7.84
+    },
+    "CSIL-MAY": {
+      "buy_below": 5.74,
+      "sell_above": 6.13,
+      "stop_loss": 5.62
+    },
+    "DGKC-MAY": {
+      "buy_below": 170.62,
+      "sell_above": 182.0,
+      "stop_loss": 167.12
+    },
+    "DCL-MAY": {
+      "buy_below": 9.25,
+      "sell_above": 9.87,
+      "stop_loss": 9.06
+    },
+    "ENGROH-MAY": {
+      "buy_below": 267.64,
+      "sell_above": 285.48,
+      "stop_loss": 262.15
+    },
+    "EPCL-MAY": {
+      "buy_below": 30.8,
+      "sell_above": 32.85,
+      "stop_loss": 30.17
+    },
+    "FCL-MAY": {
+      "buy_below": 21.5,
+      "sell_above": 22.93,
+      "stop_loss": 21.06
+    },
+    "FATIMA-MAYB": {
+      "buy_below": 127.72,
+      "sell_above": 136.24,
+      "stop_loss": 125.1
+    },
+    "FCCL-MAY": {
+      "buy_below": 47.14,
+      "sell_above": 50.28,
+      "stop_loss": 46.17
+    },
+    "FFC-MAY": {
+      "buy_below": 497.26,
+      "sell_above": 530.41,
+      "stop_loss": 487.06
+    },
+    "FFL-MAY": {
+      "buy_below": 16.06,
+      "sell_above": 17.13,
+      "stop_loss": 15.73
+    },
+    "FABL-MAYC": {
+      "buy_below": 84.39,
+      "sell_above": 90.01,
+      "stop_loss": 82.66
+    },
+    "FCEPL-MAYB": {
+      "buy_below": 92.44,
+      "sell_above": 98.6,
+      "stop_loss": 90.54
+    },
+    "GAL-MAY": {
+      "buy_below": 411.45,
+      "sell_above": 438.88,
+      "stop_loss": 403.01
+    },
+    "GHNI-MAY": {
+      "buy_below": 771.23,
+      "sell_above": 822.64,
+      "stop_loss": 755.4
+    },
+    "GCIL-MAY": {
+      "buy_below": 28.13,
+      "sell_above": 30.0,
+      "stop_loss": 27.55
+    },
+    "GGL-MAY": {
+      "buy_below": 18.04,
+      "sell_above": 19.24,
+      "stop_loss": 17.67
+    },
+    "GATM-MAY": {
+      "buy_below": 22.04,
+      "sell_above": 23.51,
+      "stop_loss": 21.59
+    },
+    "HBL-MAYC": {
+      "buy_below": 276.02,
+      "sell_above": 294.42,
+      "stop_loss": 270.36
+    },
+    "HUBC-MAYB": {
+      "buy_below": 212.55,
+      "sell_above": 226.72,
+      "stop_loss": 208.19
+    },
+    "HUMNL-MAY": {
+      "buy_below": 11.21,
+      "sell_above": 11.96,
+      "stop_loss": 10.98
+    },
+    "IMAGE-MAY": {
+      "buy_below": 23.58,
+      "sell_above": 25.15,
+      "stop_loss": 23.09
+    },
+    "ISL-MAY": {
+      "buy_below": 75.15,
+      "sell_above": 80.16,
+      "stop_loss": 73.61
+    },
+    "ILP-MAY": {
+      "buy_below": 78.97,
+      "sell_above": 84.24,
+      "stop_loss": 77.35
+    },
+    "JVDC-MAY": {
+      "buy_below": 120.9,
+      "sell_above": 128.96,
+      "stop_loss": 118.42
+    },
+    "KEL-MAY": {
+      "buy_below": 7.35,
+      "sell_above": 7.84,
+      "stop_loss": 7.2
+    },
+    "KOSM-MAY": {
+      "buy_below": 5.56,
+      "sell_above": 5.93,
+      "stop_loss": 5.44
+    },
+    "KAPCO-MAY": {
+      "buy_below": 26.8,
+      "sell_above": 28.59,
+      "stop_loss": 26.25
+    },
+    "LOTCHEM-MAY": {
+      "buy_below": 25.79,
+      "sell_above": 27.51,
+      "stop_loss": 25.26
+    },
+    "LUCK-MAY": {
+      "buy_below": 398.77,
+      "sell_above": 425.36,
+      "stop_loss": 390.59
+    },
+    "MLCF-MAY": {
+      "buy_below": 78.0,
+      "sell_above": 83.2,
+      "stop_loss": 76.4
+    },
+    "MARI-MAY": {
+      "buy_below": 624.0,
+      "sell_above": 665.6,
+      "stop_loss": 611.2
+    },
+    "MEBL-MAYC": {
+      "buy_below": 468.0,
+      "sell_above": 499.2,
+      "stop_loss": 458.4
+    },
+    "MTL-MAY": {
+      "buy_below": 499.23,
+      "sell_above": 532.51,
+      "stop_loss": 488.99
+    },
+    "MUGHAL-MAY": {
+      "buy_below": 68.25,
+      "sell_above": 72.8,
+      "stop_loss": 66.85
+    },
+    "NBP-MAYB": {
+      "buy_below": 177.45,
+      "sell_above": 189.28,
+      "stop_loss": 173.81
+    },
+    "NRL-MAY": {
+      "buy_below": 362.8,
+      "sell_above": 386.98,
+      "stop_loss": 355.36
+    },
+    "NCPL-MAY": {
+      "buy_below": 64.06,
+      "sell_above": 68.33,
+      "stop_loss": 62.74
+    },
+    "NML-MAY": {
+      "buy_below": 139.43,
+      "sell_above": 148.73,
+      "stop_loss": 136.57
+    },
+    "NPL-MAY": {
+      "buy_below": 71.38,
+      "sell_above": 76.14,
+      "stop_loss": 69.92
+    },
+    "OGDC-MAY": {
+      "buy_below": 299.32,
+      "sell_above": 319.28,
+      "stop_loss": 293.19
+    },
+    "PSO-MAY": {
+      "buy_below": 355.09,
+      "sell_above": 378.76,
+      "stop_loss": 347.8
+    },
+    "PTC-MAY": {
+      "buy_below": 47.77,
+      "sell_above": 50.96,
+      "stop_loss": 46.79
+    },
+    "PACE-MAY": {
+      "buy_below": 11.55,
+      "sell_above": 12.32,
+      "stop_loss": 11.32
+    },
+    "PAEL-MAY": {
+      "buy_below": 37.05,
+      "sell_above": 39.52,
+      "stop_loss": 36.29
+    },
+    "PIBTL-MAY": {
+      "buy_below": 14.63,
+      "sell_above": 15.61,
+      "stop_loss": 14.33
+    },
+    "POL-MAY": {
+      "buy_below": 648.38,
+      "sell_above": 691.6,
+      "stop_loss": 635.07
+    },
+    "PPL-MAY": {
+      "buy_below": 207.99,
+      "sell_above": 221.85,
+      "stop_loss": 203.72
+    },
+    "PRL-MAY": {
+      "buy_below": 36.1,
+      "sell_above": 38.51,
+      "stop_loss": 35.36
+    },
+    "PIAHCLA-MAY": {
+      "buy_below": 20.67,
+      "sell_above": 22.05,
+      "stop_loss": 20.25
+    },
+    "POWER-MAY": {
+      "buy_below": 18.04,
+      "sell_above": 19.24,
+      "stop_loss": 17.67
+    },
+    "SAZEW-MAYB": {
+      "buy_below": 1925.62,
+      "sell_above": 2054.0,
+      "stop_loss": 1886.12
+    },
+    "SLGL-MAY": {
+      "buy_below": 14.17,
+      "sell_above": 15.11,
+      "stop_loss": 13.88
+    },
+    "SNBL-MAY": {
+      "buy_below": 19.16,
+      "sell_above": 20.44,
+      "stop_loss": 18.77
+    },
+    "SNGP-MAY": {
+      "buy_below": 96.04,
+      "sell_above": 102.44,
+      "stop_loss": 94.07
+    },
+    "SSGC-MAY": {
+      "buy_below": 24.85,
+      "sell_above": 26.51,
+      "stop_loss": 24.34
+    },
+    "SYM-MAY": {
+      "buy_below": 10.09,
+      "sell_above": 10.76,
+      "stop_loss": 9.88
+    },
+    "SYS-MAYB": {
+      "buy_below": 144.3,
+      "sell_above": 153.92,
+      "stop_loss": 141.34
+    },
+    "TELE-MAY": {
+      "buy_below": 7.8,
+      "sell_above": 8.32,
+      "stop_loss": 7.64
+    },
+    "THCCL-MAY": {
+      "buy_below": 53.14,
+      "sell_above": 56.68,
+      "stop_loss": 52.05
+    },
+    "TOMCL-MAY": {
+      "buy_below": 32.17,
+      "sell_above": 34.32,
+      "stop_loss": 31.51
+    },
+    "SEARL-MAY": {
+      "buy_below": 85.8,
+      "sell_above": 91.52,
+      "stop_loss": 84.04
+    },
+    "TPLP-MAY": {
+      "buy_below": 7.32,
+      "sell_above": 7.81,
+      "stop_loss": 7.17
+    },
+    "TREET-MAY": {
+      "buy_below": 22.92,
+      "sell_above": 24.45,
+      "stop_loss": 22.45
+    },
+    "TRG-MAY": {
+      "buy_below": 51.72,
+      "sell_above": 55.17,
+      "stop_loss": 50.66
+    },
+    "UBL-MAYC": {
+      "buy_below": 376.35,
+      "sell_above": 401.44,
+      "stop_loss": 368.63
+    },
+    "UNITY-MAY": {
+      "buy_below": 11.8,
+      "sell_above": 12.58,
+      "stop_loss": 11.56
+    },
+    "WAVES-MAY": {
+      "buy_below": 9.51,
+      "sell_above": 10.14,
+      "stop_loss": 9.31
+    },
+    "WTL-MAY": {
+      "buy_below": 1.31,
+      "sell_above": 1.39,
+      "stop_loss": 1.28
+    },
+    "BGL": {
+      "buy_below": 9.67,
+      "sell_above": 10.32,
+      "stop_loss": 9.47
+    },
+    "FRCL": {
+      "buy_below": 66.3,
+      "sell_above": 70.72,
+      "stop_loss": 64.94
+    },
+    "GHGL": {
+      "buy_below": 36.07,
+      "sell_above": 38.48,
+      "stop_loss": 35.34
+    },
+    "GVGL": {
+      "buy_below": 52.65,
+      "sell_above": 56.16,
+      "stop_loss": 51.57
+    },
+    "GGGL": {
+      "buy_below": 7.8,
+      "sell_above": 8.32,
+      "stop_loss": 7.64
+    },
+    "KCL": {
+      "buy_below": 131.62,
+      "sell_above": 140.4,
+      "stop_loss": 128.92
+    },
+    "STCL": {
+      "buy_below": 10.96,
+      "sell_above": 11.69,
+      "stop_loss": 10.73
+    },
+    "TGL": {
+      "buy_below": 160.88,
+      "sell_above": 171.6,
+      "stop_loss": 157.57
+    },
+    "AICL": {
+      "buy_below": 75.08,
+      "sell_above": 80.08,
+      "stop_loss": 73.53
+    },
+    "ALIFE": {
+      "buy_below": 31.54,
+      "sell_above": 33.64,
+      "stop_loss": 30.89
+    },
+    "AGIC": {
+      "buy_below": 34.13,
+      "sell_above": 36.41,
+      "stop_loss": 33.43
+    },
+    "ALAC": {
+      "buy_below": 12.82,
+      "sell_above": 13.68,
+      "stop_loss": 12.56
+    },
+    "ATIL": {
+      "buy_below": 68.02,
+      "sell_above": 72.55,
+      "stop_loss": 66.62
+    },
+    "CENI": {
+      "buy_below": 51.67,
+      "sell_above": 55.12,
+      "stop_loss": 50.61
+    },
+    "CSIL": {
+      "buy_below": 5.61,
+      "sell_above": 5.98,
+      "stop_loss": 5.49
+    },
+    "EFUG": {
+      "buy_below": 124.8,
+      "sell_above": 133.12,
+      "stop_loss": 122.24
+    },
+    "EFUL": {
+      "buy_below": 139.42,
+      "sell_above": 148.72,
+      "stop_loss": 136.56
+    },
+    "HICL": {
+      "buy_below": 10.96,
+      "sell_above": 11.69,
+      "stop_loss": 10.73
+    },
+    "IGIHL": {
+      "buy_below": 202.8,
+      "sell_above": 216.32,
+      "stop_loss": 198.64
+    },
+    "IGIL": {
+      "buy_below": 19.7,
+      "sell_above": 21.02,
+      "stop_loss": 19.3
+    },
+    "JLICL": {
+      "buy_below": 169.13,
+      "sell_above": 180.41,
+      "stop_loss": 165.66
+    },
+    "JGICL": {
+      "buy_below": 72.13,
+      "sell_above": 76.94,
+      "stop_loss": 70.65
+    },
+    "PKGI": {
+      "buy_below": 19.99,
+      "sell_above": 21.32,
+      "stop_loss": 19.58
+    },
+    "PAKQATAR": {
+      "buy_below": 16.77,
+      "sell_above": 17.89,
+      "stop_loss": 16.43
+    },
+    "PQGTL": {
+      "buy_below": 12.19,
+      "sell_above": 13.0,
+      "stop_loss": 11.94
+    },
+    "PAKRI": {
+      "buy_below": 16.19,
+      "sell_above": 17.27,
+      "stop_loss": 15.86
+    },
+    "PIL": {
+      "buy_below": 4.66,
+      "sell_above": 4.97,
+      "stop_loss": 4.56
+    },
+    "PINL": {
+      "buy_below": 8.78,
+      "sell_above": 9.36,
+      "stop_loss": 8.59
+    },
+    "RICL": {
+      "buy_below": 13.23,
+      "sell_above": 14.11,
+      "stop_loss": 12.96
+    },
+    "SHNI": {
+      "buy_below": 7.12,
+      "sell_above": 7.59,
+      "stop_loss": 6.97
+    },
+    "TPLI": {
+      "buy_below": 25.35,
+      "sell_above": 27.04,
+      "stop_loss": 24.83
+    },
+    "TPLL": {
+      "buy_below": 20.47,
+      "sell_above": 21.84,
+      "stop_loss": 20.05
+    },
+    "UNIC": {
+      "buy_below": 12.19,
+      "sell_above": 13.0,
+      "stop_loss": 11.94
+    },
+    "786": {
+      "buy_below": 29.74,
+      "sell_above": 31.72,
+      "stop_loss": 29.13
+    },
+    "AKDSL": {
+      "buy_below": 31.93,
+      "sell_above": 34.06,
+      "stop_loss": 31.28
+    },
+    "AMBL": {
+      "buy_below": 25.26,
+      "sell_above": 26.95,
+      "stop_loss": 24.74
+    },
+    "AHL": {
+      "buy_below": 97.5,
+      "sell_above": 104.0,
+      "stop_loss": 95.5
+    },
+    "ARMG": {
+      "buy_below": 54.5,
+      "sell_above": 58.14,
+      "stop_loss": 53.38
+    },
+    "DEL": {
+      "buy_below": 17.57,
+      "sell_above": 18.74,
+      "stop_loss": 17.21
+    },
+    "DLL": {
+      "buy_below": 507.0,
+      "sell_above": 540.8,
+      "stop_loss": 496.6
+    },
+    "ENGROH": {
+      "buy_below": 268.12,
+      "sell_above": 286.0,
+      "stop_loss": 262.62
+    },
+    "ESBL": {
+      "buy_below": 14.19,
+      "sell_above": 15.13,
+      "stop_loss": 13.9
+    },
+    "FNEL": {
+      "buy_below": 1.33,
+      "sell_above": 1.41,
+      "stop_loss": 1.3
+    },
+    "FCIBL": {
+      "buy_below": 36.27,
+      "sell_above": 38.69,
+      "stop_loss": 35.53
+    },
+    "FCEL": {
+      "buy_below": 5.75,
+      "sell_above": 6.14,
+      "stop_loss": 5.63
+    },
+    "FDPL": {
+      "buy_below": 4.3,
+      "sell_above": 4.59,
+      "stop_loss": 4.21
+    },
+    "IML": {
+      "buy_below": 23.4,
+      "sell_above": 24.96,
+      "stop_loss": 22.92
+    },
+    "IMS": {
+      "buy_below": 16.08,
+      "sell_above": 17.15,
+      "stop_loss": 15.75
+    },
+    "ICIBL": {
+      "buy_below": 4.11,
+      "sell_above": 4.39,
+      "stop_loss": 4.03
+    },
+    "FCSC": {
+      "buy_below": 4.84,
+      "sell_above": 5.16,
+      "stop_loss": 4.74
+    },
+    "JSCL": {
+      "buy_below": 17.95,
+      "sell_above": 19.15,
+      "stop_loss": 17.58
+    },
+    "JSIL": {
+      "buy_below": 33.25,
+      "sell_above": 35.46,
+      "stop_loss": 32.57
+    },
+    "LSECL": {
+      "buy_below": 5.17,
+      "sell_above": 5.51,
+      "stop_loss": 5.06
+    },
+    "LSEFSL": {
+      "buy_below": 14.76,
+      "sell_above": 15.75,
+      "stop_loss": 14.46
+    },
+    "LSEVL": {
+      "buy_below": 8.48,
+      "sell_above": 9.05,
+      "stop_loss": 8.31
+    },
+    "MCBIM": {
+      "buy_below": 163.8,
+      "sell_above": 174.72,
+      "stop_loss": 160.44
+    },
+    "NEXT": {
+      "buy_below": 11.03,
+      "sell_above": 11.76,
+      "stop_loss": 10.8
+    },
+    "OLPL": {
+      "buy_below": 49.41,
+      "sell_above": 52.71,
+      "stop_loss": 48.4
+    },
+    "PSX": {
+      "buy_below": 36.95,
+      "sell_above": 39.42,
+      "stop_loss": 36.19
+    },
+    "PASL": {
+      "buy_below": 2.52,
+      "sell_above": 2.68,
+      "stop_loss": 2.46
+    },
+    "PIAHCLA": {
+      "buy_below": 19.71,
+      "sell_above": 21.03,
+      "stop_loss": 19.31
+    },
+    "SIBL": {
+      "buy_below": 7.62,
+      "sell_above": 8.13,
+      "stop_loss": 7.47
+    },
+    "TSBL": {
+      "buy_below": 1.64,
+      "sell_above": 1.75,
+      "stop_loss": 1.6
+    },
+    "CJPL": {
+      "buy_below": 13.04,
+      "sell_above": 13.9,
+      "stop_loss": 12.77
+    },
+    "SUHJ": {
+      "buy_below": 84.81,
+      "sell_above": 90.46,
+      "stop_loss": 83.07
+    },
+    "GRYL": {
+      "buy_below": 19.49,
+      "sell_above": 20.79,
+      "stop_loss": 19.09
+    },
+    "PGLC": {
+      "buy_below": 12.7,
+      "sell_above": 13.55,
+      "stop_loss": 12.44
+    },
+    "BATA": {
+      "buy_below": 941.85,
+      "sell_above": 1004.64,
+      "stop_loss": 922.53
+    },
+    "LEUL": {
+      "buy_below": 28.66,
+      "sell_above": 30.58,
+      "stop_loss": 28.08
+    },
+    "PAKL": {
+      "buy_below": 42.9,
+      "sell_above": 45.76,
+      "stop_loss": 42.02
+    },
+    "SGF": {
+      "buy_below": 95.75,
+      "sell_above": 102.14,
+      "stop_loss": 93.79
+    },
+    "SRVI": {
+      "buy_below": 1645.76,
+      "sell_above": 1755.48,
+      "stop_loss": 1612.0
+    },
+    "AKDHL": {
+      "buy_below": 154.04,
+      "sell_above": 164.31,
+      "stop_loss": 150.88
+    },
+    "AKGL": {
+      "buy_below": 55.12,
+      "sell_above": 58.79,
+      "stop_loss": 53.99
+    },
+    "ARPAK": {
+      "buy_below": 69.22,
+      "sell_above": 73.84,
+      "stop_loss": 67.8
+    },
+    "DIIL": {
+      "buy_below": 74.23,
+      "sell_above": 79.18,
+      "stop_loss": 72.7
+    },
+    "ECOP": {
+      "buy_below": 45.58,
+      "sell_above": 48.62,
+      "stop_loss": 44.65
+    },
+    "GAMON": {
+      "buy_below": 19.5,
+      "sell_above": 20.8,
+      "stop_loss": 19.1
+    },
+    "GOC": {
+      "buy_below": 82.74,
+      "sell_above": 88.25,
+      "stop_loss": 81.04
+    },
+    "MWMP": {
+      "buy_below": 48.75,
+      "sell_above": 52.0,
+      "stop_loss": 47.75
+    },
+    "OML": {
+      "buy_below": 29.75,
+      "sell_above": 31.73,
+      "stop_loss": 29.14
+    },
+    "PSEL": {
+      "buy_below": 810.23,
+      "sell_above": 864.25,
+      "stop_loss": 793.61
+    },
+    "PABC": {
+      "buy_below": 101.11,
+      "sell_above": 107.85,
+      "stop_loss": 99.03
+    },
+    "SHFA": {
+      "buy_below": 475.8,
+      "sell_above": 507.52,
+      "stop_loss": 466.04
+    },
+    "STPL": {
+      "buy_below": 6.87,
+      "sell_above": 7.33,
+      "stop_loss": 6.73
+    },
+    "TRIPF": {
+      "buy_below": 114.56,
+      "sell_above": 122.2,
+      "stop_loss": 112.21
+    },
+    "UDLI": {
+      "buy_below": 18.4,
+      "sell_above": 19.62,
+      "stop_loss": 18.02
+    },
+    "UBDL": {
+      "buy_below": 22.89,
+      "sell_above": 24.42,
+      "stop_loss": 22.42
+    },
+    "UDPL": {
+      "buy_below": 111.1,
+      "sell_above": 118.51,
+      "stop_loss": 108.82
+    },
+    "FFLM": {
+      "buy_below": 6.62,
+      "sell_above": 7.06,
+      "stop_loss": 6.48
+    },
+    "FANM": {
+      "buy_below": 5.97,
+      "sell_above": 6.36,
+      "stop_loss": 5.84
+    },
+    "BFMOD": {
+      "buy_below": 19.2,
+      "sell_above": 20.48,
+      "stop_loss": 18.8
+    },
+    "FECM": {
+      "buy_below": 15.54,
+      "sell_above": 16.58,
+      "stop_loss": 15.22
+    },
+    "FEM": {
+      "buy_below": 7.62,
+      "sell_above": 8.13,
+      "stop_loss": 7.47
+    },
+    "FTMM": {
+      "buy_below": 12.86,
+      "sell_above": 13.72,
+      "stop_loss": 12.6
+    },
+    "FHAM": {
+      "buy_below": 29.05,
+      "sell_above": 30.99,
+      "stop_loss": 28.46
+    },
+    "FIBLM": {
+      "buy_below": 11.51,
+      "sell_above": 12.27,
+      "stop_loss": 11.27
+    },
+    "FIMM": {
+      "buy_below": 175.5,
+      "sell_above": 187.2,
+      "stop_loss": 171.9
+    },
+    "OLPM": {
+      "buy_below": 22.13,
+      "sell_above": 23.61,
+      "stop_loss": 21.68
+    },
+    "ORM": {
+      "buy_below": 9.48,
+      "sell_above": 10.11,
+      "stop_loss": 9.28
+    },
+    "PIM": {
+      "buy_below": 21.19,
+      "sell_above": 22.6,
+      "stop_loss": 20.75
+    },
+    "FPJM": {
+      "buy_below": 6.63,
+      "sell_above": 7.07,
+      "stop_loss": 6.49
+    },
+    "SINDM": {
+      "buy_below": 21.01,
+      "sell_above": 22.41,
+      "stop_loss": 20.58
+    },
+    "FTSM": {
+      "buy_below": 21.69,
+      "sell_above": 23.14,
+      "stop_loss": 21.25
+    },
+    "TRSM": {
+      "buy_below": 14.78,
+      "sell_above": 15.77,
+      "stop_loss": 14.48
+    },
+    "UCAPM": {
+      "buy_below": 5.33,
+      "sell_above": 5.69,
+      "stop_loss": 5.22
+    },
+    "WASL": {
+      "buy_below": 4.9,
+      "sell_above": 5.23,
+      "stop_loss": 4.8
+    },
+    "MARI": {
+      "buy_below": 622.05,
+      "sell_above": 663.52,
+      "stop_loss": 609.29
+    },
+    "OGDC": {
+      "buy_below": 297.01,
+      "sell_above": 316.82,
+      "stop_loss": 290.92
+    },
+    "POL": {
+      "buy_below": 651.3,
+      "sell_above": 694.72,
+      "stop_loss": 637.94
+    },
+    "PPL": {
+      "buy_below": 210.5,
+      "sell_above": 224.54,
+      "stop_loss": 206.18
+    },
+    "APL": {
+      "buy_below": 550.98,
+      "sell_above": 587.71,
+      "stop_loss": 539.68
+    },
+    "BPL": {
+      "buy_below": 33.14,
+      "sell_above": 35.35,
+      "stop_loss": 32.46
+    },
+    "HASCOL": {
+      "buy_below": 20.09,
+      "sell_above": 21.42,
+      "stop_loss": 19.67
+    },
+    "HTL": {
+      "buy_below": 43.87,
+      "sell_above": 46.79,
+      "stop_loss": 42.97
+    },
+    "OBOY": {
+      "buy_below": 8.93,
+      "sell_above": 9.53,
+      "stop_loss": 8.75
+    },
+    "PSO": {
+      "buy_below": 354.42,
+      "sell_above": 378.05,
+      "stop_loss": 347.15
+    },
+    "SNGP": {
+      "buy_below": 95.55,
+      "sell_above": 101.92,
+      "stop_loss": 93.59
+    },
+    "SSGC": {
+      "buy_below": 25.0,
+      "sell_above": 26.67,
+      "stop_loss": 24.49
+    },
+    "WAFI": {
+      "buy_below": 202.8,
+      "sell_above": 216.32,
+      "stop_loss": 198.64
+    },
+    "CEPB": {
+      "buy_below": 26.33,
+      "sell_above": 28.09,
+      "stop_loss": 25.79
+    },
+    "CPPL": {
+      "buy_below": 72.69,
+      "sell_above": 77.53,
+      "stop_loss": 71.2
+    },
+    "IPAK": {
+      "buy_below": 28.28,
+      "sell_above": 30.17,
+      "stop_loss": 27.7
+    },
+    "MACFL": {
+      "buy_below": 26.32,
+      "sell_above": 28.08,
+      "stop_loss": 25.79
+    },
+    "MERIT": {
+      "buy_below": 8.75,
+      "sell_above": 9.33,
+      "stop_loss": 8.57
+    },
+    "PKGS": {
+      "buy_below": 692.36,
+      "sell_above": 738.51,
+      "stop_loss": 678.16
+    },
+    "PPP": {
+      "buy_below": 126.76,
+      "sell_above": 135.21,
+      "stop_loss": 124.16
+    },
+    "RPL": {
+      "buy_below": 14.67,
+      "sell_above": 15.65,
+      "stop_loss": 14.37
+    },
+    "SEPL": {
+      "buy_below": 142.34,
+      "sell_above": 151.83,
+      "stop_loss": 139.42
+    },
+    "SPEL": {
+      "buy_below": 39.0,
+      "sell_above": 41.6,
+      "stop_loss": 38.2
+    },
+    "ABOT": {
+      "buy_below": 877.5,
+      "sell_above": 936.0,
+      "stop_loss": 859.5
+    },
+    "AGP": {
+      "buy_below": 180.86,
+      "sell_above": 192.92,
+      "stop_loss": 177.15
+    },
+    "BFBIO": {
+      "buy_below": 134.54,
+      "sell_above": 143.51,
+      "stop_loss": 131.78
+    },
+    "CPHL": {
+      "buy_below": 74.59,
+      "sell_above": 79.56,
+      "stop_loss": 73.06
+    },
+    "FEROZ": {
+      "buy_below": 374.58,
+      "sell_above": 399.55,
+      "stop_loss": 366.89
+    },
+    "GLAXO": {
+      "buy_below": 338.23,
+      "sell_above": 360.78,
+      "stop_loss": 331.29
+    },
+    "HALEON": {
+      "buy_below": 723.45,
+      "sell_above": 771.68,
+      "stop_loss": 708.61
+    },
+    "HINOON": {
+      "buy_below": 921.37,
+      "sell_above": 982.79,
+      "stop_loss": 902.47
+    },
+    "HPL": {
+      "buy_below": 3895.12,
+      "sell_above": 4154.8,
+      "stop_loss": 3815.22
+    },
+    "IBLHL": {
+      "buy_below": 45.82,
+      "sell_above": 48.88,
+      "stop_loss": 44.88
+    },
+    "LIVEN": {
+      "buy_below": 37.98,
+      "sell_above": 40.51,
+      "stop_loss": 37.2
+    },
+    "MACTER": {
+      "buy_below": 271.16,
+      "sell_above": 289.23,
+      "stop_loss": 265.6
+    },
+    "OTSU": {
+      "buy_below": 292.5,
+      "sell_above": 312.0,
+      "stop_loss": 286.5
+    },
+    "SEARL": {
+      "buy_below": 84.92,
+      "sell_above": 90.58,
+      "stop_loss": 83.18
+    },
+    "ALTN": {
+      "buy_below": 8.04,
+      "sell_above": 8.58,
+      "stop_loss": 7.88
+    },
+    "EPQL": {
+      "buy_below": 22.82,
+      "sell_above": 24.35,
+      "stop_loss": 22.36
+    },
+    "HUBC": {
+      "buy_below": 214.99,
+      "sell_above": 229.32,
+      "stop_loss": 210.58
+    },
+    "KEL": {
+      "buy_below": 7.31,
+      "sell_above": 7.8,
+      "stop_loss": 7.16
+    },
+    "KOHE": {
+      "buy_below": 15.65,
+      "sell_above": 16.69,
+      "stop_loss": 15.33
+    },
+    "KOHP": {
+      "buy_below": 26.42,
+      "sell_above": 28.18,
+      "stop_loss": 25.88
+    },
+    "KAPCO": {
+      "buy_below": 26.71,
+      "sell_above": 28.49,
+      "stop_loss": 26.16
+    },
+    "LPL": {
+      "buy_below": 19.6,
+      "sell_above": 20.9,
+      "stop_loss": 19.2
+    },
+    "NCPL": {
+      "buy_below": 63.38,
+      "sell_above": 67.6,
+      "stop_loss": 62.07
+    },
+    "NPL": {
+      "buy_below": 70.3,
+      "sell_above": 74.98,
+      "stop_loss": 68.86
+    },
+    "PKGP": {
+      "buy_below": 46.7,
+      "sell_above": 49.82,
+      "stop_loss": 45.74
+    },
+    "SGPL": {
+      "buy_below": 46.27,
+      "sell_above": 49.36,
+      "stop_loss": 45.32
+    },
+    "SPWL": {
+      "buy_below": 9.37,
+      "sell_above": 9.99,
+      "stop_loss": 9.18
+    },
+    "SEL": {
+      "buy_below": 25.36,
+      "sell_above": 27.05,
+      "stop_loss": 24.84
+    },
+    "TSPL": {
+      "buy_below": 9.67,
+      "sell_above": 10.32,
+      "stop_loss": 9.47
+    },
+    "BRRG": {
+      "buy_below": 39.1,
+      "sell_above": 41.7,
+      "stop_loss": 38.3
+    },
+    "HUSI": {
+      "buy_below": 34.88,
+      "sell_above": 37.2,
+      "stop_loss": 34.16
+    },
+    "JVDC": {
+      "buy_below": 123.34,
+      "sell_above": 131.56,
+      "stop_loss": 120.81
+    },
+    "PACE": {
+      "buy_below": 11.21,
+      "sell_above": 11.96,
+      "stop_loss": 10.98
+    },
+    "TPLP": {
+      "buy_below": 7.31,
+      "sell_above": 7.8,
+      "stop_loss": 7.16
+    },
+    "DCR": {
+      "buy_below": 35.28,
+      "sell_above": 37.63,
+      "stop_loss": 34.55
+    },
+    "GRR": {
+      "buy_below": 19.16,
+      "sell_above": 20.44,
+      "stop_loss": 18.77
+    },
+    "IREIT": {
+      "buy_below": 8.02,
+      "sell_above": 8.56,
+      "stop_loss": 7.86
+    },
+    "SRR": {
+      "buy_below": 15.89,
+      "sell_above": 16.95,
+      "stop_loss": 15.57
+    },
+    "TPLRF1": {
+      "buy_below": 7.89,
+      "sell_above": 8.41,
+      "stop_loss": 7.73
+    },
+    "ATRL": {
+      "buy_below": 906.75,
+      "sell_above": 967.2,
+      "stop_loss": 888.15
+    },
+    "CNERGY": {
+      "buy_below": 7.99,
+      "sell_above": 8.53,
+      "stop_loss": 7.83
+    },
+    "NRL": {
+      "buy_below": 365.62,
+      "sell_above": 389.99,
+      "stop_loss": 358.12
+    },
+    "PRL": {
+      "buy_below": 35.83,
+      "sell_above": 38.22,
+      "stop_loss": 35.1
+    },
+    "AGSML": {
+      "buy_below": 7.91,
+      "sell_above": 8.43,
+      "stop_loss": 7.75
+    },
+    "ADAMS": {
+      "buy_below": 74.12,
+      "sell_above": 79.06,
+      "stop_loss": 72.6
+    },
+    "AABS": {
+      "buy_below": 877.5,
+      "sell_above": 936.0,
+      "stop_loss": 859.5
+    },
+    "ALNRS": {
+      "buy_below": 121.88,
+      "sell_above": 130.0,
+      "stop_loss": 119.38
+    },
+    "ANSM": {
+      "buy_below": 12.87,
+      "sell_above": 13.73,
+      "stop_loss": 12.61
+    },
+    "CHAS": {
+      "buy_below": 74.11,
+      "sell_above": 79.05,
+      "stop_loss": 72.59
+    },
+    "DWSM": {
+      "buy_below": 6.09,
+      "sell_above": 6.5,
+      "stop_loss": 5.97
+    },
+    "HRPL": {
+      "buy_below": 17.36,
+      "sell_above": 18.51,
+      "stop_loss": 17.0
+    },
+    "HABSM": {
+      "buy_below": 70.31,
+      "sell_above": 74.99,
+      "stop_loss": 68.87
+    },
+    "HWQS": {
+      "buy_below": 19.5,
+      "sell_above": 20.8,
+      "stop_loss": 19.1
+    },
+    "JDWS": {
+      "buy_below": 831.67,
+      "sell_above": 887.12,
+      "stop_loss": 814.62
+    },
+    "JSML": {
+      "buy_below": 111.14,
+      "sell_above": 118.55,
+      "stop_loss": 108.86
+    },
+    "KPUS": {
+      "buy_below": 655.73,
+      "sell_above": 699.44,
+      "stop_loss": 642.28
+    },
+    "MRNS": {
+      "buy_below": 61.47,
+      "sell_above": 65.57,
+      "stop_loss": 60.21
+    },
+    "MIRKS": {
+      "buy_below": 33.03,
+      "sell_above": 35.24,
+      "stop_loss": 32.36
+    },
+    "NONS": {
+      "buy_below": 87.75,
+      "sell_above": 93.6,
+      "stop_loss": 85.95
+    },
+    "PMRS": {
+      "buy_below": 468.01,
+      "sell_above": 499.21,
+      "stop_loss": 458.41
+    },
+    "SKRS": {
+      "buy_below": 26.57,
+      "sell_above": 28.34,
+      "stop_loss": 26.02
+    },
+    "SANSM": {
+      "buy_below": 116.97,
+      "sell_above": 124.77,
+      "stop_loss": 114.57
+    },
+    "SHSML": {
+      "buy_below": 370.5,
+      "sell_above": 395.2,
+      "stop_loss": 362.9
+    },
+    "SHJS": {
+      "buy_below": 137.58,
+      "sell_above": 146.75,
+      "stop_loss": 134.76
+    },
+    "SML": {
+      "buy_below": 113.6,
+      "sell_above": 121.17,
+      "stop_loss": 111.27
+    },
+    "TCORPCPS": {
+      "buy_below": 11.21,
+      "sell_above": 11.96,
+      "stop_loss": 10.98
+    },
+    "TICL": {
+      "buy_below": 916.55,
+      "sell_above": 977.65,
+      "stop_loss": 897.75
+    },
+    "GATI": {
+      "buy_below": 85.69,
+      "sell_above": 91.41,
+      "stop_loss": 83.93
+    },
+    "IBFL": {
+      "buy_below": 212.92,
+      "sell_above": 227.12,
+      "stop_loss": 208.55
+    },
+    "IMAGE": {
+      "buy_below": 23.39,
+      "sell_above": 24.95,
+      "stop_loss": 22.91
+    },
+    "RUPL": {
+      "buy_below": 25.34,
+      "sell_above": 27.03,
+      "stop_loss": 24.82
+    },
+    "AIRLINK": {
+      "buy_below": 130.46,
+      "sell_above": 139.15,
+      "stop_loss": 127.78
+    },
+    "AVN": {
+      "buy_below": 31.49,
+      "sell_above": 33.59,
+      "stop_loss": 30.85
+    },
+    "HUMNL": {
+      "buy_below": 10.68,
+      "sell_above": 11.39,
+      "stop_loss": 10.46
+    },
+    "ITANZ": {
+      "buy_below": 28.32,
+      "sell_above": 30.21,
+      "stop_loss": 27.74
+    },
+    "MDTL": {
+      "buy_below": 5.98,
+      "sell_above": 6.38,
+      "stop_loss": 5.85
+    },
+    "NETSOL": {
+      "buy_below": 112.12,
+      "sell_above": 119.6,
+      "stop_loss": 109.82
+    },
+    "OCTOPUS": {
+      "buy_below": 30.7,
+      "sell_above": 32.75,
+      "stop_loss": 30.07
+    },
+    "PTC": {
+      "buy_below": 47.08,
+      "sell_above": 50.22,
+      "stop_loss": 46.12
+    },
+    "PAKD": {
+      "buy_below": 108.22,
+      "sell_above": 115.44,
+      "stop_loss": 106.0
+    },
+    "QTECH": {
+      "buy_below": 32.94,
+      "sell_above": 35.13,
+      "stop_loss": 32.26
+    },
+    "STL": {
+      "buy_below": 53.68,
+      "sell_above": 57.26,
+      "stop_loss": 52.58
+    },
+    "SYM": {
+      "buy_below": 10.34,
+      "sell_above": 11.03,
+      "stop_loss": 10.13
+    },
+    "SYS": {
+      "buy_below": 145.28,
+      "sell_above": 154.96,
+      "stop_loss": 142.29
+    },
+    "TELE": {
+      "buy_below": 7.8,
+      "sell_above": 8.32,
+      "stop_loss": 7.64
+    },
+    "TPL": {
+      "buy_below": 9.75,
+      "sell_above": 10.4,
+      "stop_loss": 9.55
+    },
+    "TPLT": {
+      "buy_below": 11.71,
+      "sell_above": 12.49,
+      "stop_loss": 11.47
+    },
+    "TRG": {
+      "buy_below": 52.11,
+      "sell_above": 55.59,
+      "stop_loss": 51.04
+    },
+    "WTL": {
+      "buy_below": 1.32,
+      "sell_above": 1.4,
+      "stop_loss": 1.29
+    },
+    "ZAL": {
+      "buy_below": 41.92,
+      "sell_above": 44.72,
+      "stop_loss": 41.06
+    },
+    "ZUMA": {
+      "buy_below": 66.39,
+      "sell_above": 70.81,
+      "stop_loss": 65.03
+    },
+    "AHTM": {
+      "buy_below": 89.07,
+      "sell_above": 95.0,
+      "stop_loss": 87.24
+    },
+    "ANTM": {
+      "buy_below": 26.87,
+      "sell_above": 28.66,
+      "stop_loss": 26.32
+    },
+    "ADMM": {
+      "buy_below": 88.1,
+      "sell_above": 93.97,
+      "stop_loss": 86.29
+    },
+    "ARUJ": {
+      "buy_below": 11.11,
+      "sell_above": 11.85,
+      "stop_loss": 10.88
+    },
+    "ANL": {
+      "buy_below": 9.9,
+      "sell_above": 10.56,
+      "stop_loss": 9.69
+    },
+    "BTL": {
+      "buy_below": 1389.38,
+      "sell_above": 1482.0,
+      "stop_loss": 1360.88
+    },
+    "CHBL": {
+      "buy_below": 8.05,
+      "sell_above": 8.59,
+      "stop_loss": 7.89
+    },
+    "CLCPS": {
+      "buy_below": 2.91,
+      "sell_above": 3.1,
+      "stop_loss": 2.85
+    },
+    "CRTM": {
+      "buy_below": 81.61,
+      "sell_above": 87.05,
+      "stop_loss": 79.93
+    },
+    "FSWL": {
+      "buy_below": 78.0,
+      "sell_above": 83.2,
+      "stop_loss": 76.4
+    },
+    "FZCM": {
+      "buy_below": 271.15,
+      "sell_above": 289.22,
+      "stop_loss": 265.59
+    },
+    "FML": {
+      "buy_below": 48.75,
+      "sell_above": 52.0,
+      "stop_loss": 47.75
+    },
+    "GFIL": {
+      "buy_below": 29.25,
+      "sell_above": 31.2,
+      "stop_loss": 28.65
+    },
+    "GATM": {
+      "buy_below": 22.3,
+      "sell_above": 23.78,
+      "stop_loss": 21.84
+    },
+    "HAFL": {
+      "buy_below": 350.02,
+      "sell_above": 373.36,
+      "stop_loss": 342.84
+    },
+    "HAEL": {
+      "buy_below": 16.96,
+      "sell_above": 18.1,
+      "stop_loss": 16.62
+    },
+    "ILP": {
+      "buy_below": 79.94,
+      "sell_above": 85.27,
+      "stop_loss": 78.3
+    },
+    "JUBS": {
+      "buy_below": 54.13,
+      "sell_above": 57.74,
+      "stop_loss": 53.02
+    },
+    "KOIL": {
+      "buy_below": 46.3,
+      "sell_above": 49.39,
+      "stop_loss": 45.35
+    },
+    "KML": {
+      "buy_below": 8.56,
+      "sell_above": 9.13,
+      "stop_loss": 8.38
+    },
+    "KTML": {
+      "buy_below": 43.8,
+      "sell_above": 46.72,
+      "stop_loss": 42.9
+    },
+    "MSOT": {
+      "buy_below": 74.09,
+      "sell_above": 79.03,
+      "stop_loss": 72.57
+    },
+    "MEHT": {
+      "buy_below": 249.59,
+      "sell_above": 266.23,
+      "stop_loss": 244.47
+    },
+    "NCL": {
+      "buy_below": 38.75,
+      "sell_above": 41.33,
+      "stop_loss": 37.95
+    },
+    "NML": {
+      "buy_below": 140.39,
+      "sell_above": 149.75,
+      "stop_loss": 137.51
+    },
+    "PASM": {
+      "buy_below": 5.28,
+      "sell_above": 5.64,
+      "stop_loss": 5.18
+    },
+    "QUET": {
+      "buy_below": 16.96,
+      "sell_above": 18.1,
+      "stop_loss": 16.62
+    },
+    "REDCO": {
+      "buy_below": 25.36,
+      "sell_above": 27.05,
+      "stop_loss": 24.84
+    },
+    "SFL": {
+      "buy_below": 955.5,
+      "sell_above": 1019.2,
+      "stop_loss": 935.9
+    },
+    "STML": {
+      "buy_below": 30.51,
+      "sell_above": 32.54,
+      "stop_loss": 29.88
+    },
+    "STYLERS": {
+      "buy_below": 43.88,
+      "sell_above": 46.8,
+      "stop_loss": 42.98
+    },
+    "SURC": {
+      "buy_below": 118.95,
+      "sell_above": 126.88,
+      "stop_loss": 116.51
+    },
+    "TOWL": {
+      "buy_below": 117.0,
+      "sell_above": 124.8,
+      "stop_loss": 114.6
+    },
+    "ZAHID": {
+      "buy_below": 51.67,
+      "sell_above": 55.12,
+      "stop_loss": 50.61
+    },
+    "AATM": {
+      "buy_below": 44.85,
+      "sell_above": 47.84,
+      "stop_loss": 43.93
+    },
+    "AMTEX": {
+      "buy_below": 4.48,
+      "sell_above": 4.78,
+      "stop_loss": 4.39
+    },
+    "ARCTM": {
+      "buy_below": 27.1,
+      "sell_above": 28.9,
+      "stop_loss": 26.54
+    },
+    "ASTM": {
+      "buy_below": 18.74,
+      "sell_above": 19.99,
+      "stop_loss": 18.36
+    },
+    "CTM": {
+      "buy_below": 6.58,
+      "sell_above": 7.02,
+      "stop_loss": 6.45
+    },
+    "DMC": {
+      "buy_below": 181.2,
+      "sell_above": 193.28,
+      "stop_loss": 177.49
+    },
+    "DSIL": {
+      "buy_below": 7.47,
+      "sell_above": 7.97,
+      "stop_loss": 7.32
+    },
+    "DFSM": {
+      "buy_below": 12.93,
+      "sell_above": 13.79,
+      "stop_loss": 12.66
+    },
+    "DINT": {
+      "buy_below": 64.35,
+      "sell_above": 68.64,
+      "stop_loss": 63.03
+    },
+    "ELCM": {
+      "buy_below": 147.22,
+      "sell_above": 157.04,
+      "stop_loss": 144.2
+    },
+    "GADT": {
+      "buy_below": 257.4,
+      "sell_above": 274.56,
+      "stop_loss": 252.12
+    },
+    "HIRAT": {
+      "buy_below": 4.28,
+      "sell_above": 4.57,
+      "stop_loss": 4.19
+    },
+    "IDRT": {
+      "buy_below": 26.67,
+      "sell_above": 28.44,
+      "stop_loss": 26.12
+    },
+    "IDYM": {
+      "buy_below": 120.75,
+      "sell_above": 128.8,
+      "stop_loss": 118.28
+    },
+    "JATM": {
+      "buy_below": 22.84,
+      "sell_above": 24.37,
+      "stop_loss": 22.38
+    },
+    "JKSM": {
+      "buy_below": 184.47,
+      "sell_above": 196.77,
+      "stop_loss": 180.69
+    },
+    "JDMT": {
+      "buy_below": 116.95,
+      "sell_above": 124.75,
+      "stop_loss": 114.55
+    },
+    "KSTM": {
+      "buy_below": 8.38,
+      "sell_above": 8.94,
+      "stop_loss": 8.21
+    },
+    "KOHTM": {
+      "buy_below": 52.66,
+      "sell_above": 56.17,
+      "stop_loss": 51.58
+    },
+    "KOSM": {
+      "buy_below": 5.56,
+      "sell_above": 5.93,
+      "stop_loss": 5.44
+    },
+    "MQTM": {
+      "buy_below": 19.47,
+      "sell_above": 20.77,
+      "stop_loss": 19.07
+    },
+    "RUBY": {
+      "buy_below": 13.25,
+      "sell_above": 14.13,
+      "stop_loss": 12.98
+    },
+    "SAIF": {
+      "buy_below": 27.3,
+      "sell_above": 29.12,
+      "stop_loss": 26.74
+    },
+    "SLYT": {
+      "buy_below": 12.43,
+      "sell_above": 13.26,
+      "stop_loss": 12.18
+    },
+    "SNAI": {
+      "buy_below": 29.93,
+      "sell_above": 31.93,
+      "stop_loss": 29.32
+    },
+    "SSML": {
+      "buy_below": 25.04,
+      "sell_above": 26.71,
+      "stop_loss": 24.52
+    },
+    "SERT": {
+      "buy_below": 28.44,
+      "sell_above": 30.34,
+      "stop_loss": 27.86
+    },
+    "SHDT": {
+      "buy_below": 39.98,
+      "sell_above": 42.65,
+      "stop_loss": 39.16
+    },
+    "SHCM": {
+      "buy_below": 35.59,
+      "sell_above": 37.96,
+      "stop_loss": 34.86
+    },
+    "SZTM": {
+      "buy_below": 49.67,
+      "sell_above": 52.98,
+      "stop_loss": 48.65
+    },
+    "SUTM": {
+      "buy_below": 96.48,
+      "sell_above": 102.91,
+      "stop_loss": 94.5
+    },
+    "TATM": {
+      "buy_below": 124.82,
+      "sell_above": 133.14,
+      "stop_loss": 122.26
+    },
+    "ASHT": {
+      "buy_below": 53.73,
+      "sell_above": 57.31,
+      "stop_loss": 52.63
+    },
+    "ICCI": {
+      "buy_below": 11.99,
+      "sell_above": 12.79,
+      "stop_loss": 11.75
+    },
+    "PRWM": {
+      "buy_below": 56.06,
+      "sell_above": 59.8,
+      "stop_loss": 54.91
+    },
+    "STJT": {
+      "buy_below": 124.6,
+      "sell_above": 132.91,
+      "stop_loss": 122.05
+    },
+    "YOUW": {
+      "buy_below": 6.34,
+      "sell_above": 6.76,
+      "stop_loss": 6.21
+    },
+    "ZTL": {
+      "buy_below": 15.87,
+      "sell_above": 16.93,
+      "stop_loss": 15.55
+    },
+    "KHTC": {
+      "buy_below": 300.3,
+      "sell_above": 320.32,
+      "stop_loss": 294.14
+    },
+    "PAKT": {
+      "buy_below": 1385.47,
+      "sell_above": 1477.84,
+      "stop_loss": 1357.05
+    },
+    "BLUEX": {
+      "buy_below": 6.4,
+      "sell_above": 6.82,
+      "stop_loss": 6.26
+    },
+    "PNSC": {
+      "buy_below": 477.75,
+      "sell_above": 509.6,
+      "stop_loss": 467.95
+    },
+    "PIBTL": {
+      "buy_below": 14.62,
+      "sell_above": 15.6,
+      "stop_loss": 14.32
+    },
+    "PICT": {
+      "buy_below": 46.79,
+      "sell_above": 49.91,
+      "stop_loss": 45.83
+    },
+    "SLGL": {
+      "buy_below": 14.05,
+      "sell_above": 14.99,
+      "stop_loss": 13.76
+    },
+    "POML": {
+      "buy_below": 145.76,
+      "sell_above": 155.48,
+      "stop_loss": 142.77
+    },
+    "SSOM": {
+      "buy_below": 401.21,
+      "sell_above": 427.96,
+      "stop_loss": 392.98
+    },
+    "BNWM": {
+      "buy_below": 62.84,
+      "sell_above": 67.03,
+      "stop_loss": 61.55
+    },
+    "GEMPACRA": {
+      "buy_below": 27.93,
+      "sell_above": 29.8,
+      "stop_loss": 27.36
+    },
+    "GEMNETS": {
+      "buy_below": 17.71,
+      "sell_above": 18.89,
+      "stop_loss": 17.34
+    }
   },
   "global": {
     "poll_interval_seconds": 15,

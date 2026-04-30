@@ -3,7 +3,8 @@
  */
 
 import clsx from 'clsx'
-import { useUIStore } from '../../store/useUIStore'
+import { useUIStore }    from '../../store/useUIStore'
+import { useMarketStore } from '../../store/useMarketStore'
 
 function PLCell({ value, pct }) {
   if (value == null) return <span className="text-gray-600 font-mono">—</span>
@@ -26,8 +27,24 @@ function fmt(n, dec = 2) {
 
 export default function PositionsTable({ positions = [], onSell }) {
   const setTradeIntent = useUIStore((s) => s.setTradeIntent)
+  const signals        = useMarketStore((s) => s.signals)
 
-  if (!positions.length) {
+  // Build symbol → live price map from WebSocket feed
+  const livePrice = {}
+  signals.forEach((s) => { if (s.current != null) livePrice[s.symbol] = s.current })
+
+  // Enrich each position with live price + recalculated P&L
+  const enriched = positions.map((pos) => {
+    const live = livePrice[pos.symbol]
+    if (live == null) return pos
+    const current_value   = live * pos.shares
+    const cost_basis      = pos.avg_buy_price * pos.shares
+    const unrealized_pl   = current_value - cost_basis
+    const unrealized_pl_pct = cost_basis > 0 ? (unrealized_pl / cost_basis) * 100 : null
+    return { ...pos, current_price: live, current_value, unrealized_pl, unrealized_pl_pct }
+  })
+
+  if (!enriched.length) {
     return (
       <div className="flex items-center justify-center h-28 text-gray-600 text-sm border border-gray-800 rounded-lg">
         No open positions.
@@ -51,7 +68,7 @@ export default function PositionsTable({ positions = [], onSell }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-800/50">
-          {positions.map((pos) => (
+          {enriched.map((pos) => (
             <tr key={pos.symbol} className="hover:bg-gray-800/40 transition-colors">
               <td className="px-3 py-3 font-bold text-white">{pos.symbol}</td>
               <td className="px-3 py-3 font-mono tabular-nums text-gray-200 text-right">

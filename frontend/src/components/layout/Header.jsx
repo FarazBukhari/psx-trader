@@ -85,12 +85,12 @@ export default function Header() {
   const clearToast = useUIStore((s) => s.clearToast)
   const showToast  = useUIStore((s) => s.showToast)
 
-  // No-update staleness (10s without WS tick)
+  // No-update staleness — fire only if no WS tick for 2× the poll interval (10s)
   const [wsStale, setWsStale] = useState(false)
   useEffect(() => {
     if (!lastUpdate) return
     setWsStale(false)
-    const id = setTimeout(() => setWsStale(true), 10_000)
+    const id = setTimeout(() => setWsStale(true), 20_000)
     return () => clearTimeout(id)
   }, [lastUpdate])
 
