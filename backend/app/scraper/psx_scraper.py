@@ -208,8 +208,14 @@ class PSXScraper:
 
         # Snapshot write debounce — write at most once every 60 s to avoid
         # hammering the disk on every 15-second poll cycle.
+        # Exception: debounce is bypassed in the last 2 minutes before close
+        # and on the open→closed transition so final prices are never lost.
         self._last_snapshot_write: float = 0.0
         self._SNAPSHOT_INTERVAL: float = 60.0
+        self._CLOSING_WINDOW_S:   int   = 120   # force-write within 2 min of close
+
+        # Track previous open state to detect the market-close transition
+        self._was_market_open: bool = False
 
     # ------------------------------------------------------------------
     # Public API
@@ -231,6 +237,14 @@ class PSXScraper:
 
         # Check market hours first — avoid hammering PSX when closed
         status: MarketStatus = market_status()
+
+        # Detect open → closed transition: force-flush in-memory snapshot to disk
+        # so the last live prices are never lost due to the debounce interval.
+        if self._was_market_open and not status.is_open and self._last_snapshot:
+            _save_snapshot(self._last_snapshot, self._snapshot_path)
+            self._last_snapshot_write = time.time()
+            logger.info("Market closed — forced final snapshot flush")
+        self._was_market_open = status.is_open
 
         if not status.is_open:
             return self._serve_stale(
@@ -289,11 +303,17 @@ class PSXScraper:
             self._consecutive_failures = 0
             live_rows = [{**r, "stale": False, "source": "live"} for r in rows]
             self._last_snapshot = live_rows
-            # Debounced write — at most once every 60 s (was every 15 s = 4× the I/O)
+            # Write snapshot if debounce elapsed OR we're in the closing window.
+            # The closing window (last 2 min) bypasses the 60-s debounce so the
+            # final traded prices are always persisted before the market shuts.
             now = time.time()
-            if now - self._last_snapshot_write >= self._SNAPSHOT_INTERVAL:
+            secs_to_close = market_status().seconds_to_close or 9999
+            near_close    = secs_to_close <= self._CLOSING_WINDOW_S
+            if near_close or now - self._last_snapshot_write >= self._SNAPSHOT_INTERVAL:
                 _save_snapshot(live_rows, self._snapshot_path)
                 self._last_snapshot_write = now
+                if near_close:
+                    logger.debug("Near-close snapshot write (%ds to close)", secs_to_close)
             logger.info("Live scrape: %d stocks", len(live_rows))
             return live_rows
 
