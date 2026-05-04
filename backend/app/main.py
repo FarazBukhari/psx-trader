@@ -25,7 +25,7 @@ from .api.analytics_routes import analytics_router
 from .api.performance_routes import performance_router
 from .analytics.signal_evaluator import evaluate_pending_signals
 from .analytics.forward_tracker import (
-    create_trade_on_signal,
+    create_trades_batch,
     recover_open_trades,
     update_open_trades,
 )
@@ -146,12 +146,11 @@ async def _poll_loop(scraper: PSXScraper):
                 app_state.signals[s["symbol"]] = s
                 # Persist non-HOLD / changed signals regardless of stale status
                 asyncio.create_task(app_state.history_store.save_signal(s))
-                # Forward-test: attempt to open a trade for every live actionable signal.
-                # Deduplication is handled inside create_trade_on_signal (P1: one OPEN
-                # trade per symbol at a time). No signal_changed guard here — that flag
-                # resets on restart and would suppress all trades at startup.
-                if not is_stale and s.get("signal", "").upper() in ("BUY", "SELL", "FORCE_SELL"):
-                    asyncio.create_task(create_trade_on_signal(s))
+
+            # Forward-test: open trades for all actionable signals in ONE session.
+            # Batching avoids spawning N concurrent DB tasks (which exhausted the pool).
+            if not is_stale:
+                asyncio.create_task(create_trades_batch(signals))
 
             # Phase 3: log non-neutral predictions to DB (fire-and-forget)
             asyncio.create_task(app_state.prediction_engine.log_predictions(signals))

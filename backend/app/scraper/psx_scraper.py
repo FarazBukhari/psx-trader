@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
+from bs4 import BeautifulSoup
 
 from ..market_hours import market_status, MarketStatus
 
@@ -205,6 +206,11 @@ class PSXScraper:
         # Track consecutive live failures for logging
         self._consecutive_failures = 0
 
+        # Snapshot write debounce — write at most once every 60 s to avoid
+        # hammering the disk on every 15-second poll cycle.
+        self._last_snapshot_write: float = 0.0
+        self._SNAPSHOT_INTERVAL: float = 60.0
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -283,7 +289,11 @@ class PSXScraper:
             self._consecutive_failures = 0
             live_rows = [{**r, "stale": False, "source": "live"} for r in rows]
             self._last_snapshot = live_rows
-            _save_snapshot(live_rows, self._snapshot_path)
+            # Debounced write — at most once every 60 s (was every 15 s = 4× the I/O)
+            now = time.time()
+            if now - self._last_snapshot_write >= self._SNAPSHOT_INTERVAL:
+                _save_snapshot(live_rows, self._snapshot_path)
+                self._last_snapshot_write = now
             logger.info("Live scrape: %d stocks", len(live_rows))
             return live_rows
 
@@ -338,8 +348,6 @@ class PSXScraper:
         Returns empty list on any parse failure (caller handles fallback).
         """
         try:
-            from bs4 import BeautifulSoup  # noqa: PLC0415
-
             soup   = BeautifulSoup(html, "html.parser")
             result: list[dict] = []
 

@@ -17,13 +17,14 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 
 logger = logging.getLogger(__name__)
 
@@ -48,20 +49,62 @@ logger.debug("Database URL: %s", DATABASE_URL)
 # Engines
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# SQLite tuning
+# ---------------------------------------------------------------------------
+# Applied on every new connection via a sync event listener.
+# Works with aiosqlite because SQLAlchemy's async engine wraps a real sqlite3
+# connection under the hood — the sync "connect" event still fires.
+#
+# WAL mode    — writers don't block readers; concurrent write attempts queue
+#               up rather than hard-failing with "database is locked".
+# busy_timeout — SQLite will retry for up to 15 000 ms before raising an error,
+#               giving queued async tasks time to drain.
+# synchronous=NORMAL — safe with WAL; faster than FULL with no meaningful
+#               durability trade-off for this workload.
+
+def _apply_sqlite_pragmas(dbapi_conn, _connection_record):
+    cur = dbapi_conn.cursor()
+    cur.execute("PRAGMA journal_mode=WAL")
+    cur.execute("PRAGMA synchronous=NORMAL")
+    cur.execute("PRAGMA busy_timeout=15000")   # ms — wait up to 15s before failing
+    cur.execute("PRAGMA cache_size=-8000")     # 8 MB page cache per connection
+    cur.close()
+
+
 # Async engine — used by the FastAPI app
+#
+# SQLite: use NullPool — connections are cheap file-handles and do not benefit
+# from a connection pool.  Pooling SQLite actually hurts: it serialises
+# concurrent async tasks waiting for a slot, causing the QueuePool exhaustion
+# seen when many forward_tracker tasks fire in the same tick.
+# PostgreSQL: keep the default pool (QueuePool) with generous limits.
+_is_sqlite = DATABASE_URL.startswith("sqlite")
+
 async_engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    # SQLite-specific: needed for async multi-threaded access
-    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
+    connect_args=(
+        {"check_same_thread": False, "timeout": 30}
+        if _is_sqlite else {}
+    ),
+    **( {"poolclass": NullPool} if _is_sqlite else {"pool_size": 10, "max_overflow": 20} ),
 )
 
 # Sync engine — used ONLY by Alembic CLI migrations
 engine = create_engine(
     DATABASE_URL_SYNC,
     echo=False,
-    connect_args={"check_same_thread": False} if DATABASE_URL_SYNC.startswith("sqlite") else {},
+    connect_args=(
+        {"check_same_thread": False, "timeout": 20}
+        if DATABASE_URL_SYNC.startswith("sqlite") else {}
+    ),
 )
+
+# Register the pragma hook on both engines
+if DATABASE_URL.startswith("sqlite"):
+    event.listen(async_engine.sync_engine, "connect", _apply_sqlite_pragmas)
+    event.listen(engine,                   "connect", _apply_sqlite_pragmas)
 
 # ---------------------------------------------------------------------------
 # Session factory

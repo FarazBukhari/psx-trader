@@ -22,6 +22,7 @@ import asyncio
 import json
 import logging
 import time
+from collections import defaultdict
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import select, func, text
@@ -47,13 +48,18 @@ class HistoryStore:
         await store.warm_price_buffer(price_buffer)
     """
 
-    # How many ticks to buffer before flushing to DB in one INSERT.
-    # Reduces write amplification during high-frequency polling.
-    FLUSH_BATCH_SIZE = 10
+    # Flush to DB when buffer reaches this size OR when max age elapses.
+    FLUSH_BATCH_SIZE  = 20    # was 10 — fewer, larger writes
+    FLUSH_MAX_AGE_S   = 60    # flush at most 60 s after the first item was buffered
 
     def __init__(self) -> None:
         self._tick_buffer:   list[dict] = []
         self._signal_buffer: list[dict] = []
+        # Timestamps of when each buffer last received its first new item.
+        self._tick_buffer_since:   float = 0.0
+        self._signal_buffer_since: float = 0.0
+        # Single lock shared by both flush methods so tick and signal flushes
+        # don't overlap each other — reduces concurrent SQLite write contention.
         self._flush_lock = asyncio.Lock()
 
     # ------------------------------------------------------------------
@@ -63,18 +69,22 @@ class HistoryStore:
     async def save_tick(self, stock: dict) -> None:
         """
         Buffer a scraped price tick.
-        Flush automatically when buffer reaches FLUSH_BATCH_SIZE.
-        Callers can also call flush_ticks() explicitly (e.g. on shutdown).
+        Flushes when buffer reaches FLUSH_BATCH_SIZE OR when the oldest buffered
+        item is more than FLUSH_MAX_AGE_S seconds old (time-based safety net).
         """
+        now = time.time()
+        if not self._tick_buffer:
+            self._tick_buffer_since = now
         self._tick_buffer.append(stock)
-        if len(self._tick_buffer) >= self.FLUSH_BATCH_SIZE:
+        age = now - self._tick_buffer_since
+        if len(self._tick_buffer) >= self.FLUSH_BATCH_SIZE or age >= self.FLUSH_MAX_AGE_S:
             await self.flush_ticks()
 
     async def save_signal(self, signal: dict) -> None:
         """
         Buffer a generated signal for persistence.
         Only saves signals that actually changed, to reduce DB noise.
-        Pass all signals — filtering happens here.
+        Flushes on size OR age, same as save_tick.
         """
         # Only persist changed signals to keep the signals_log lean.
         # Always persist BUY/SELL/FORCE_SELL regardless.
@@ -82,8 +92,12 @@ class HistoryStore:
         changed  = signal.get("signal_changed", False)
         if sig_type == "HOLD" and not changed:
             return
+        now = time.time()
+        if not self._signal_buffer:
+            self._signal_buffer_since = now
         self._signal_buffer.append(signal)
-        if len(self._signal_buffer) >= self.FLUSH_BATCH_SIZE:
+        age = now - self._signal_buffer_since
+        if len(self._signal_buffer) >= self.FLUSH_BATCH_SIZE or age >= self.FLUSH_MAX_AGE_S:
             await self.flush_signals()
 
     async def flush_ticks(self) -> None:
@@ -91,18 +105,18 @@ class HistoryStore:
         if not self._tick_buffer:
             return
         async with self._flush_lock:
+            # Drain buffer inside the lock so flush_signals can't overlap
             batch = self._tick_buffer[:]
             self._tick_buffer.clear()
-
-        rows = [_stock_to_row(s) for s in batch]
-        try:
-            async with get_session() as session:
-                session.add_all([PriceHistory(**r) for r in rows])
-            logger.debug("Flushed %d price ticks to DB", len(rows))
-        except Exception as exc:
-            logger.error("Failed to flush price ticks: %s", exc)
-            # Re-buffer on failure so data isn't lost
-            self._tick_buffer = batch + self._tick_buffer
+            rows = [_stock_to_row(s) for s in batch]
+            try:
+                async with get_session() as session:
+                    session.add_all([PriceHistory(**r) for r in rows])
+                logger.debug("Flushed %d price ticks to DB", len(rows))
+            except Exception as exc:
+                logger.error("Failed to flush price ticks: %s", exc)
+                # Re-buffer on failure so data isn't lost
+                self._tick_buffer = batch + self._tick_buffer
 
     async def flush_signals(self) -> None:
         """Write all buffered signals to DB in a single INSERT."""
@@ -111,15 +125,14 @@ class HistoryStore:
         async with self._flush_lock:
             batch = self._signal_buffer[:]
             self._signal_buffer.clear()
-
-        rows = [_signal_to_row(s) for s in batch]
-        try:
-            async with get_session() as session:
-                session.add_all([SignalLog(**r) for r in rows])
-            logger.debug("Flushed %d signals to DB", len(rows))
-        except Exception as exc:
-            logger.error("Failed to flush signals: %s", exc)
-            self._signal_buffer = batch + self._signal_buffer
+            rows = [_signal_to_row(s) for s in batch]
+            try:
+                async with get_session() as session:
+                    session.add_all([SignalLog(**r) for r in rows])
+                logger.debug("Flushed %d signals to DB", len(rows))
+            except Exception as exc:
+                logger.error("Failed to flush signals: %s", exc)
+                self._signal_buffer = batch + self._signal_buffer
 
     # ------------------------------------------------------------------
     # Public read API
@@ -211,23 +224,51 @@ class HistoryStore:
 
         Without this, every restart would produce 20+ ticks of blind
         HOLD signals while the buffer slowly fills up.
+
+        Optimisation: previously this issued N+1 queries (one SELECT DISTINCT
+        to get symbols, then one SELECT per symbol).  Now it issues 2 queries:
+          1. SELECT DISTINCT symbol                          (get symbol list)
+          2. SELECT symbol, close WHERE symbol IN (...)      (all prices at once)
+        Prices are limited to a recent window then capped at 200 per symbol
+        in Python, so the query never pulls more rows than necessary.
         """
         symbols = await self.get_available_symbols()
         if not symbols:
             logger.info("warm_price_buffer: no history in DB yet — starting fresh")
             return
 
+        # At 15 s poll, 200 ticks ≈ 50 min.  Use a 4-hour window to guarantee
+        # we get 200 rows even after a long gap, without fetching all history.
+        cutoff = int(time.time()) - (4 * 3600)
+
+        async with get_session() as session:
+            q = (
+                select(PriceHistory.symbol, PriceHistory.close)
+                .where(PriceHistory.symbol.in_(symbols))
+                .where(PriceHistory.scraped_at >= cutoff)
+                .order_by(PriceHistory.symbol, PriceHistory.scraped_at.desc())
+            )
+            result = await session.execute(q)
+            all_rows = result.all()
+
+        # Group in Python: keep first 200 per symbol (already DESC, so these
+        # are the most recent), then push oldest-first into the buffer.
+        by_symbol: dict[str, list[float]] = defaultdict(list)
+        for row in all_rows:
+            lst = by_symbol[row.symbol]
+            if len(lst) < 200:
+                lst.append(row.close)
+
         total = 0
-        for symbol in symbols:
-            rows = await self.get_history(symbol, n=200)
-            for row in rows:
-                price_buffer.push(symbol, row["close"])
-            total += len(rows)
+        for symbol, prices in by_symbol.items():
+            for price in reversed(prices):   # oldest-first matches buffer expectation
+                price_buffer.push(symbol, price)
+            total += len(prices)
 
         logger.info(
-            "warm_price_buffer: loaded %d ticks across %d symbols from DB",
+            "warm_price_buffer: loaded %d ticks across %d symbols from DB (2 queries)",
             total,
-            len(symbols),
+            len(by_symbol),
         )
 
 

@@ -92,9 +92,21 @@ MODEL_WEIGHTS: dict[str, float] = {
 }
 
 # Trade action thresholds
-MIN_CONFIDENCE_ACT  = 0.40   # confidence must exceed this to trade
-MIN_TOTAL_STR_ACT   = 0.30   # total weighted strength must exceed this
-MIN_AGREEMENT_ACT   = 0.25   # agreement_factor must exceed this
+#
+# Calibration rationale:
+#   confidence = total_strength × agreement_factor
+#   With typical single-model strengths of 0.2–0.5 and weights summing to 0.90,
+#   a stock with clear momentum (r²=0.4, modest slope) + mild RSI signal
+#   produces confidence ≈ 0.12–0.22.  The old thresholds (0.40 / 0.30 / 0.25)
+#   required near-perfect multi-model alignment and caused almost every stock
+#   to return "avoid".
+#
+#   New values still filter genuine noise (require directional consensus from
+#   at least one model at meaningful strength) while allowing the engine to
+#   produce actionable BUY / SELL outputs under normal market conditions.
+MIN_CONFIDENCE_ACT  = 0.12   # confidence must exceed this to trade  (was 0.40)
+MIN_TOTAL_STR_ACT   = 0.10   # total weighted strength must exceed this (was 0.30)
+MIN_AGREEMENT_ACT   = 0.15   # agreement_factor must exceed this       (was 0.25)
 
 # Volume multiplier caps
 VOL_BOOST           = 1.30   # vol_ratio > 1.5 → boost all strengths 30 %

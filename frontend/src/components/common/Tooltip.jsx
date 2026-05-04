@@ -1,39 +1,48 @@
 /**
- * Tooltip — hover tooltip for column headers and info icons.
+ * Tooltip — hover tooltip that renders via a React portal so it always
+ * appears above sticky headers and overflow-clipped containers.
+ *
  * Usage: <Tooltip text="RSI explanation"><span>ⓘ</span></Tooltip>
  */
 
-import { useState } from 'react'
-import clsx from 'clsx'
+import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 
-export default function Tooltip({ text, children, placement = 'top' }) {
-  const [visible, setVisible] = useState(false)
+export default function Tooltip({ text, children }) {
+  const [pos, setPos] = useState(null)
+  const ref = useRef(null)
 
-  const placementCls = {
-    top:    'bottom-full left-1/2 -translate-x-1/2 mb-1.5',
-    bottom: 'top-full left-1/2 -translate-x-1/2 mt-1.5',
-    left:   'right-full top-1/2 -translate-y-1/2 mr-1.5',
-    right:  'left-full top-1/2 -translate-y-1/2 ml-1.5',
-  }[placement] || 'bottom-full left-1/2 -translate-x-1/2 mb-1.5'
+  const handleMouseEnter = () => {
+    if (ref.current) {
+      const r = ref.current.getBoundingClientRect()
+      setPos({ x: r.left + r.width / 2, y: r.top })
+    }
+  }
 
   return (
     <span
-      className="relative inline-flex items-center"
-      onMouseEnter={() => setVisible(true)}
-      onMouseLeave={() => setVisible(false)}
+      ref={ref}
+      className="inline-flex items-center"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={() => setPos(null)}
     >
       {children}
-      {visible && (
+      {pos && createPortal(
         <span
-          className={clsx(
-            'absolute z-50 w-max max-w-xs px-2.5 py-1.5 rounded',
-            'bg-gray-800 border border-gray-700 text-gray-200 text-xs leading-snug',
-            'pointer-events-none shadow-xl',
-            placementCls,
-          )}
+          style={{
+            position:  'fixed',
+            left:      pos.x,
+            top:       pos.y - 8,
+            transform: 'translate(-50%, -100%)',
+            zIndex:    9999,
+            pointerEvents: 'none',
+            maxWidth:  '18rem',
+          }}
+          className="px-2.5 py-1.5 rounded bg-gray-800 border border-gray-700 text-gray-200 text-xs leading-snug shadow-xl whitespace-normal"
         >
           {text}
-        </span>
+        </span>,
+        document.body,
       )}
     </span>
   )

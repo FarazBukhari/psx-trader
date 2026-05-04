@@ -16,6 +16,7 @@ A real-time trading signal, portfolio management, and forward-testing system for
 - **Forward-tests every signal in real time** — opens a virtual trade on each BUY/SELL/FORCE_SELL, tracks price extremes, and closes on TP/SL or end-of-day
 - **Backtests any strategy** against historical price data with full metrics (win rate, Sharpe, max drawdown, profit factor)
 - **Equity curve persists across page refreshes** — portfolio snapshots are loaded from the DB on startup
+- **ML-style prediction engine** — regression-based confidence scoring, expected move %, risk classification, and trade action recommendations
 - Exposes a full REST API and live WebSocket feed
 
 ---
@@ -51,12 +52,14 @@ psx-trader/
 │   │   │   ├── performance_routes.py      # forward-test live trades + history + summary
 │   │   │   └── deps.py                    # market-open guard, rate limiter
 │   │   ├── analytics/
-│   │   │   ├── forward_tracker.py         # forward-test engine (open/update/close trades)
-│   │   │   └── signal_evaluator.py        # historical signal outcome evaluation
+│   │   │   ├── forward_tracker.py         # forward-test engine (open/update/close trades, batched)
+│   │   │   └── signal_evaluator.py        # historical signal outcome evaluation (O(N) queries)
+│   │   ├── prediction/
+│   │   │   └── prediction_engine.py       # regression-based confidence + trade action engine
 │   │   ├── db/
-│   │   │   ├── database.py                # async engine, session factory
+│   │   │   ├── database.py                # async engine, NullPool for SQLite, session factory
 │   │   │   ├── models.py                  # 8 ORM tables
-│   │   │   └── history_store.py           # buffered tick/signal persistence
+│   │   │   └── history_store.py           # batched tick/signal persistence, 2-query warm-up
 │   │   ├── portfolio/
 │   │   │   ├── portfolio_manager.py       # buy/sell execution, P&L, snapshots, reset
 │   │   │   ├── fees.py                    # PSX brokerage fee calculator
@@ -85,6 +88,9 @@ psx-trader/
 │       │   ├── Backtest.jsx
 │       │   └── Performance.jsx            # forward-test dashboard
 │       ├── components/
+│       │   ├── common/                    # Tooltip (portal-based, always above sticky header)
+│       │   ├── dashboard/                 # SignalTable — 3 collapsible sections (BUY/SELL/FORCE_SELL),
+│       │   │                              # action filter, smart sort composite score
 │       │   ├── layout/                    # Header, Tabs, StatusBar
 │       │   ├── portfolio/                 # PortfolioBar, PositionsTable, TradePanel, Chart
 │       │   └── performance/               # PerformancePanel, LiveTradesTable,
@@ -98,6 +104,57 @@ psx-trader/
 │       └── hooks/                         # useWebSocket, useNotifications
 └── start.sh                               # one-command launcher
 ```
+
+---
+
+## Dashboard
+
+The React dashboard is organised into three collapsible signal tables — one per signal type — so actionable opportunities are never buried in a long list.
+
+### Signal tables
+
+| Table | Contents |
+|---|---|
+| 🟢 BUY signals | Stocks with an active BUY signal from the signal engine |
+| 🔴 SELL signals | Stocks with an active SELL signal |
+| ⚡ FORCE_SELL signals | Stocks with an active FORCE_SELL (stop-loss breach) signal |
+
+Each table shows the 10 highest-scoring rows by default. A **Show all N stocks** button expands to the full list. The table collapses back to its header row with a single click.
+
+### Sorting
+
+**SMART SORT** (default) ranks every row by a composite score that combines prediction quality and signal strength:
+
+```
+smartScore = (confidence × (1 + expectedMove/10) × actionBoost × riskPenalty) × 0.70
+           + (action_score / 11_500) × 0.30
+
+actionBoost  : 1.5 for BUY or SELL action, 1.0 for AVOID
+riskPenalty  : 1.00 low / 0.85 medium / 0.70 high
+```
+
+You can also sort by any column header (symbol, RSI, SMA gap, volume, confidence, etc.).
+
+### Action filter
+
+A pill-style filter above the tables lets you narrow all three tables at once to stocks with a specific predicted trade action: **ALL · BUY · SELL · AVOID**.
+
+### Prediction column (ACTION)
+
+Each row shows a prediction badge derived from the ML prediction engine:
+
+| Badge | Meaning |
+|---|---|
+| `BUY` (green) | Model recommends entering a long position |
+| `SELL` (red) | Model recommends exiting or shorting |
+| `AVOID` (yellow) | Signal not strong enough to act on |
+| `—` (grey) | Prediction engine warming up (insufficient price history) |
+
+The badge also shows confidence %, expected move %, and risk level on hover.
+
+### Tooltips
+
+All `ⓘ` help icons in the table header use a portal-based renderer — they escape the `overflow-x-auto` / sticky-header stacking context and always appear on top of the table.
 
 ---
 
@@ -212,6 +269,28 @@ Trade endpoints require the market to be OPEN with live data. They return HTTP 4
 
 ---
 
+## Prediction engine
+
+Every signal is independently evaluated by a regression-based prediction engine that runs alongside the RSI/SMA signal engine. For each stock it fits a linear trend to recent closing prices and combines that with momentum and RSI indicators to produce:
+
+| Output | Description |
+|---|---|
+| `confidence` | 0–85% — how strongly the model believes in the direction (capped at 85%) |
+| `expected_move_pct` | Estimated % price move over the horizon |
+| `trade_action` | `buy` / `sell` / `avoid` based on confidence + total strength + agreement thresholds |
+| `risk` | `low` / `medium` / `high` — volatility-based risk classification |
+| `basis` | List of factors that contributed to the prediction |
+
+Thresholds for a non-AVOID recommendation are deliberately loose so that genuinely interesting setups (r² ≈ 0.4, mild RSI divergence) are surfaced rather than buried:
+
+| Threshold | Value |
+|---|---|
+| Minimum confidence to act | 12% |
+| Minimum total strength | 10% |
+| Minimum indicator agreement | 15% |
+
+---
+
 ## Forward testing engine
 
 Every live BUY / SELL / FORCE_SELL signal automatically opens a virtual forward trade tracked in the `forward_trades` table. No manual setup required.
@@ -233,6 +312,27 @@ Every live BUY / SELL / FORCE_SELL signal automatically opens a virtual forward 
 | `LOSS` | P&L < −0.2% |
 
 **Performance tab** (🎯 in the UI) shows: live open trades, closed trade history with colour-coded rows, and a summary panel with win rate, avg return/trade, avg return/hour, profit factor, and a P&L distribution chart. Auto-refreshes every 10 seconds.
+
+---
+
+## Performance & resource efficiency
+
+Several targeted optimisations reduce CPU, memory, and disk overhead without changing observable behaviour:
+
+**Database (SQLite)**
+- `NullPool` is used instead of the default connection pool — SQLite is file-based and gains nothing from pooling; removing the pool eliminates the `QueuePool limit reached` error that appeared under burst load.
+- History store writes are batched: ticks and signals accumulate in memory and are flushed in a single `INSERT` when the buffer reaches 20 rows *or* 60 seconds have elapsed (whichever comes first), instead of one write per tick.
+- `warm_price_buffer` (run on every startup) issues 2 queries instead of N+1: one `SELECT DISTINCT symbol` followed by one range `SELECT` across all symbols; grouping and capping to 200 rows per symbol is done in Python.
+- Signal evaluator's `_fetch_prices_batch` issues O(N) queries (one range `SELECT` per symbol) instead of O(N×T) individual `LIMIT 1` lookups. Timestamp matching within the result set uses `bisect` for O(log n) lookups.
+
+**Forward trade creation**
+- On each poll tick, all actionable signals are processed in a single DB session (`create_trades_batch`) instead of spawning one `asyncio.create_task` per signal. This eliminates the burst of concurrent write tasks that exhausted the connection pool.
+
+**Snapshot I/O**
+- The live price snapshot is written to disk at most once every 60 seconds (debounced), not on every 15-second poll tick — a 4× reduction in snapshot write frequency.
+
+**WebSocket broadcast**
+- The payload is serialised to JSON once and the same string is sent to every connected client (was N serialisations for N clients). Disconnected clients are collected during the broadcast pass and removed after, avoiding set mutation during iteration.
 
 ---
 

@@ -248,6 +248,83 @@ async def create_trade_on_signal(signal_dict: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Batch entry creation  (replaces per-signal create_trade_on_signal calls)
+# ---------------------------------------------------------------------------
+
+async def create_trades_batch(signals: list[dict]) -> None:
+    """
+    Open ONE DB session and insert ForwardTrade rows for all actionable signals
+    in a single tick.
+
+    This replaces the old pattern of calling create_trade_on_signal() inside a
+    loop with asyncio.create_task() — which spawned N concurrent sessions and
+    exhausted the SQLite connection pool when many signals fired at once.
+
+    Guards (same as create_trade_on_signal, applied per signal):
+      • Signal must be BUY / SELL / FORCE_SELL
+      • Data must not be stale
+      • P1 — skip if an OPEN trade already exists for the symbol
+      • UNIQUE constraint (symbol, entry_time) — final idempotency backstop
+    """
+    actionable = [
+        s for s in signals
+        if s.get("signal", "").upper() in ACTIONABLE
+        and not s.get("stale", False)
+        and s.get("current")
+    ]
+    if not actionable:
+        return
+
+    now_ts = int(time.time())
+    created: list[str] = []
+
+    try:
+        async with get_session() as session:
+            for s in actionable:
+                symbol     = s["symbol"]
+                sig        = s["signal"].upper()
+                price      = float(s["current"])
+                entry_time = s.get("generated_at") or now_ts
+
+                # P1 — only one OPEN trade per symbol at a time
+                existing = await session.execute(
+                    select(ForwardTrade.id).where(
+                        ForwardTrade.symbol == symbol,
+                        ForwardTrade.status == "OPEN",
+                    ).limit(1)
+                )
+                if existing.scalar_one_or_none() is not None:
+                    logger.debug("forward_tracker: OPEN trade exists for %s — skipping", symbol)
+                    continue
+
+                stmt = (
+                    sqlite_insert(ForwardTrade)
+                    .values(
+                        symbol           = symbol,
+                        signal           = sig,
+                        entry_price      = price,
+                        entry_time       = entry_time,
+                        max_price_seen   = price,
+                        min_price_seen   = price,
+                        status           = "OPEN",
+                        outcome          = "BREAKEVEN",
+                        mfe_pct          = 0.0,
+                        mae_pct          = 0.0,
+                        duration_minutes = 0.0,
+                    )
+                    .on_conflict_do_nothing(index_elements=["symbol", "entry_time"])
+                )
+                await session.execute(stmt)
+                created.append(f"{sig}:{symbol}")
+
+        if created:
+            logger.info("ForwardTrades created: %s", ", ".join(created))
+
+    except Exception as exc:
+        logger.warning("forward_tracker create_trades_batch failed: %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # Tick update  (called every poll cycle for ALL symbols in one batch)
 # ---------------------------------------------------------------------------
 
