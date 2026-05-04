@@ -1,20 +1,18 @@
 /**
  * Database — raw DB viewer.
  *
- * Two sub-tabs:
- *   • Price History  — OHLCV ticks for any symbol, paginated
- *   • Signals Log    — non-HOLD signal records for any symbol
- *
- * Data sources:
- *   GET /api/history/stats          — symbol list + tick counts
- *   GET /api/history/{symbol}?n=    — price ticks (oldest → newest)
- *   GET /api/history/{symbol}/signals?limit= — signal log
+ * Three sub-tabs:
+ *   • Overview      — symbol list + tick counts
+ *   • Price History — OHLCV ticks for any symbol, paginated
+ *   • Signals Log   — non-HOLD signal records for any symbol
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '../api/client'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+const MAX_RECENT = 8
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtTs(unix) {
   if (!unix) return '—'
@@ -35,17 +33,99 @@ function pct(v) {
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
 }
 
-// ── Shared sub-components ─────────────────────────────────────────────────────
+// ── Shared: searchable symbol dropdown ────────────────────────────────────────
 
-function SymbolPicker({ symbols, selected, onSelect }) {
+function SymbolSearch({ symbols, selected, onSelect }) {
+  const [query,   setQuery]   = useState('')
+  const [open,    setOpen]    = useState(false)
+  const [focused, setFocused] = useState(0)
+  const listRef = useRef(null)
+
+  const filtered = query.trim().length === 0
+    ? symbols
+    : symbols.filter((s) => s.includes(query.trim().toUpperCase()))
+
+  const choose = (sym) => {
+    onSelect(sym)
+    setQuery('')
+    setOpen(false)
+    setFocused(0)
+  }
+
+  const handleKey = (e) => {
+    if (!open) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setFocused((f) => Math.min(f + 1, filtered.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setFocused((f) => Math.max(f - 1, 0)) }
+    else if (e.key === 'Enter' && filtered[focused]) choose(filtered[focused])
+    else if (e.key === 'Escape') setOpen(false)
+  }
+
+  useEffect(() => {
+    listRef.current?.children[focused]?.scrollIntoView({ block: 'nearest' })
+  }, [focused])
+
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {symbols.map((sym) => (
+    <div className="relative">
+      <div className={`flex items-center gap-2 bg-gray-900 border rounded-xl px-3 py-2 transition ${open ? 'border-blue-500' : 'border-gray-700'}`}>
+        <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+        </svg>
+        <input
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); setFocused(0) }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onKeyDown={handleKey}
+          placeholder={selected || 'Search symbol…'}
+          className="bg-transparent text-sm text-white placeholder-gray-500 outline-none w-36"
+        />
+        {selected && !query && (
+          <span className="text-xs font-bold text-blue-400 shrink-0">{selected}</span>
+        )}
+        <svg className={`w-3.5 h-3.5 text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-56 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+          <div ref={listRef} className="max-h-64 overflow-y-auto">
+            {filtered.map((sym, i) => (
+              <button
+                key={sym}
+                onMouseDown={() => choose(sym)}
+                className={`w-full text-left px-3 py-1.5 text-sm font-mono transition ${
+                  i === focused
+                    ? 'bg-blue-600 text-white'
+                    : sym === selected
+                    ? 'bg-gray-800 text-blue-400'
+                    : 'text-gray-300 hover:bg-gray-800'
+                }`}
+              >
+                {sym}
+              </button>
+            ))}
+          </div>
+          <div className="px-3 py-1.5 border-t border-gray-800 text-[10px] text-gray-600">
+            {filtered.length} of {symbols.length} symbols
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function RecentStrip({ recent, selected, onSelect }) {
+  if (recent.length === 0) return null
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-[10px] text-gray-600 uppercase tracking-wider shrink-0">Recent</span>
+      {recent.map((sym) => (
         <button
           key={sym}
           onClick={() => onSelect(sym)}
-          className={`px-2.5 py-0.5 rounded text-xs font-bold border transition ${
-            selected === sym
+          className={`px-2.5 py-0.5 rounded-lg text-xs font-bold border transition ${
+            sym === selected
               ? 'bg-blue-600 border-blue-500 text-white'
               : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
           }`}
@@ -56,6 +136,8 @@ function SymbolPicker({ symbols, selected, onSelect }) {
     </div>
   )
 }
+
+// ── Shared: table primitives ───────────────────────────────────────────────────
 
 function TableWrap({ children }) {
   return (
@@ -94,18 +176,12 @@ function PageControls({ page, totalPages, onPrev, onNext }) {
     <div className="flex items-center justify-between px-1 text-xs text-gray-500">
       <span>Page {page} of {totalPages || 1}</span>
       <div className="flex gap-2">
-        <button
-          onClick={onPrev}
-          disabled={page <= 1}
-          className="px-3 py-1 rounded border border-gray-700 hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
-        >
+        <button onClick={onPrev} disabled={page <= 1}
+          className="px-3 py-1 rounded border border-gray-700 hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed">
           ← Prev
         </button>
-        <button
-          onClick={onNext}
-          disabled={page >= totalPages}
-          className="px-3 py-1 rounded border border-gray-700 hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed"
-        >
+        <button onClick={onNext} disabled={page >= totalPages}
+          className="px-3 py-1 rounded border border-gray-700 hover:border-gray-500 disabled:opacity-30 disabled:cursor-not-allowed">
           Next →
         </button>
       </div>
@@ -119,25 +195,26 @@ const PRICE_PAGE = 50
 
 function PriceHistoryTab({ symbols, statsMap }) {
   const [selected, setSelected] = useState(symbols[0] || null)
+  const [recent,   setRecent]   = useState([])
+  const [allRows,  setAllRows]  = useState([])
   const [rows,     setRows]     = useState([])
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState(null)
   const [page,     setPage]     = useState(1)
-  const [total,    setTotal]    = useState(0)
 
-  // Fetch up to 2000 ticks, keep all; paginate in JS for speed
-  const [allRows, setAllRows] = useState([])
+  const handleSelect = useCallback((sym) => {
+    setSelected(sym)
+    setRecent((prev) => [sym, ...prev.filter((s) => s !== sym)].slice(0, MAX_RECENT))
+  }, [])
 
   const load = useCallback(async (sym) => {
     if (!sym) return
     setLoading(true)
     setError(null)
     try {
-      const res = await api(`/api/history/${sym}?n=2000`)
-      // Reverse so newest first
-      const data = [...(res.data || [])].reverse()
+      const res  = await api(`/api/history/${sym}?n=2000`)
+      const data = [...(res.data || [])].reverse()   // newest first
       setAllRows(data)
-      setTotal(data.length)
       setPage(1)
     } catch (e) {
       setError(e.status === 404 ? 'No price history for this symbol yet.' : e.message)
@@ -147,11 +224,8 @@ function PriceHistoryTab({ symbols, statsMap }) {
     }
   }, [])
 
-  useEffect(() => {
-    if (selected) load(selected)
-  }, [selected, load])
+  useEffect(() => { if (selected) load(selected) }, [selected, load])
 
-  // Client-side pagination
   const totalPages = Math.max(1, Math.ceil(allRows.length / PRICE_PAGE))
   useEffect(() => {
     const start = (page - 1) * PRICE_PAGE
@@ -162,20 +236,20 @@ function PriceHistoryTab({ symbols, statsMap }) {
 
   return (
     <div className="space-y-4">
-      {/* Symbol picker + stats */}
-      <div className="flex flex-wrap items-start gap-4">
-        <div className="flex-1 min-w-0">
-          <SymbolPicker symbols={symbols} selected={selected} onSelect={(s) => setSelected(s)} />
+      {/* Controls row */}
+      <div className="flex flex-wrap items-center gap-4 justify-between">
+        <div className="flex items-center gap-3 flex-wrap">
+          <SymbolSearch symbols={symbols} selected={selected} onSelect={handleSelect} />
+          <RecentStrip recent={recent} selected={selected} onSelect={handleSelect} />
         </div>
         {selected && stats.ticks != null && (
-          <div className="text-[11px] text-gray-600 shrink-0 text-right leading-5">
-            <div><span className="text-gray-400">{stats.ticks.toLocaleString()}</span> ticks total</div>
-            <div>From {fmtTs(stats.first_at)} → {fmtTs(stats.last_at)}</div>
+          <div className="text-[11px] text-gray-600 text-right leading-5 shrink-0">
+            <div><span className="text-gray-400 font-mono">{stats.ticks.toLocaleString()}</span> ticks total</div>
+            <div>{fmtTs(stats.first_at)} → {fmtTs(stats.last_at)}</div>
           </div>
         )}
       </div>
 
-      {/* Table */}
       <TableWrap>
         <thead>
           <tr>
@@ -193,11 +267,10 @@ function PriceHistoryTab({ symbols, statsMap }) {
         </thead>
         <tbody>
           {loading && <StatusRow cols={10} msg="Loading…" />}
-          {!loading && error && <StatusRow cols={10} msg={error} />}
+          {!loading && error   && <StatusRow cols={10} msg={error} />}
           {!loading && !error && rows.length === 0 && <StatusRow cols={10} msg="No data" />}
           {!loading && !error && rows.map((r) => {
-            const chg = r.change_pct
-            const chgColor = chg == null ? '' : chg >= 0 ? 'text-green-400' : 'text-red-400'
+            const chgColor = r.change_pct == null ? '' : r.change_pct >= 0 ? 'text-green-400' : 'text-red-400'
             return (
               <tr key={r.id} className="hover:bg-gray-800/30 transition-colors">
                 <Td mono>{fmtTs(r.scraped_at)}</Td>
@@ -206,12 +279,12 @@ function PriceHistoryTab({ symbols, statsMap }) {
                 <Td right mono color="text-red-400">{fmtNum(r.low)}</Td>
                 <Td right mono color="text-white">{fmtNum(r.close)}</Td>
                 <Td right mono>{fmtNum(r.ldcp)}</Td>
-                <Td right mono color={chgColor}>{pct(chg)}</Td>
+                <Td right mono color={chgColor}>{pct(r.change_pct)}</Td>
                 <Td right mono>{r.volume != null ? Number(r.volume).toLocaleString() : '—'}</Td>
                 <Td>{r.sector || '—'}</Td>
                 <Td>
                   <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                    r.source === 'live' ? 'bg-green-900/50 text-green-400'
+                    r.source === 'live'       ? 'bg-green-900/50 text-green-400'
                     : r.source === 'historical' ? 'bg-blue-900/50 text-blue-400'
                     : 'bg-gray-800 text-gray-500'
                   }`}>
@@ -225,17 +298,13 @@ function PriceHistoryTab({ symbols, statsMap }) {
       </TableWrap>
 
       {allRows.length > PRICE_PAGE && (
-        <PageControls
-          page={page}
-          totalPages={totalPages}
+        <PageControls page={page} totalPages={totalPages}
           onPrev={() => setPage((p) => Math.max(1, p - 1))}
-          onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-        />
+          onNext={() => setPage((p) => Math.min(totalPages, p + 1))} />
       )}
 
       <p className="text-[11px] text-gray-700">
-        Showing newest {Math.min(2000, total).toLocaleString()} of {stats.ticks?.toLocaleString() || '?'} ticks in DB.
-        Use <code className="bg-gray-800 px-1 rounded">fetch_historical</code> to load EOD history.
+        Showing newest {Math.min(2000, allRows.length).toLocaleString()} of {stats.ticks?.toLocaleString() || '?'} ticks in DB.
       </p>
     </div>
   )
@@ -254,11 +323,17 @@ const SIG_COLOR = {
 
 function SignalsTab({ symbols }) {
   const [selected, setSelected] = useState(symbols[0] || null)
+  const [recent,   setRecent]   = useState([])
   const [allRows,  setAllRows]  = useState([])
   const [rows,     setRows]     = useState([])
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState(null)
   const [page,     setPage]     = useState(1)
+
+  const handleSelect = useCallback((sym) => {
+    setSelected(sym)
+    setRecent((prev) => [sym, ...prev.filter((s) => s !== sym)].slice(0, MAX_RECENT))
+  }, [])
 
   const load = useCallback(async (sym) => {
     if (!sym) return
@@ -276,9 +351,7 @@ function SignalsTab({ symbols }) {
     }
   }, [])
 
-  useEffect(() => {
-    if (selected) load(selected)
-  }, [selected, load])
+  useEffect(() => { if (selected) load(selected) }, [selected, load])
 
   const totalPages = Math.max(1, Math.ceil(allRows.length / SIG_PAGE))
   useEffect(() => {
@@ -288,7 +361,11 @@ function SignalsTab({ symbols }) {
 
   return (
     <div className="space-y-4">
-      <SymbolPicker symbols={symbols} selected={selected} onSelect={(s) => setSelected(s)} />
+      {/* Controls row */}
+      <div className="flex flex-wrap items-center gap-3">
+        <SymbolSearch symbols={symbols} selected={selected} onSelect={handleSelect} />
+        <RecentStrip recent={recent} selected={selected} onSelect={handleSelect} />
+      </div>
 
       <TableWrap>
         <thead>
@@ -309,7 +386,7 @@ function SignalsTab({ symbols }) {
         </thead>
         <tbody>
           {loading && <StatusRow cols={12} msg="Loading…" />}
-          {!loading && error && <StatusRow cols={12} msg={error} />}
+          {!loading && error   && <StatusRow cols={12} msg={error} />}
           {!loading && !error && rows.length === 0 && <StatusRow cols={12} msg="No signals recorded" />}
           {!loading && !error && rows.map((r) => (
             <tr key={r.id} className="hover:bg-gray-800/30 transition-colors">
@@ -355,35 +432,30 @@ function SignalsTab({ symbols }) {
       </TableWrap>
 
       {allRows.length > SIG_PAGE && (
-        <PageControls
-          page={page}
-          totalPages={totalPages}
+        <PageControls page={page} totalPages={totalPages}
           onPrev={() => setPage((p) => Math.max(1, p - 1))}
-          onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
-        />
+          onNext={() => setPage((p) => Math.min(totalPages, p + 1))} />
       )}
     </div>
   )
 }
 
-// ── Stats overview tab ────────────────────────────────────────────────────────
+// ── Overview tab ──────────────────────────────────────────────────────────────
 
 function StatsTab({ symbols, statsMap }) {
   const total = Object.values(statsMap).reduce((s, v) => s + (v.ticks || 0), 0)
-
   return (
     <div className="space-y-4">
       <div className="flex gap-4 flex-wrap">
-        <div className="bg-gray-900 rounded-lg px-4 py-2.5 border border-gray-800">
-          <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">Symbols tracked</div>
+        <div className="bg-gray-900 rounded-xl px-4 py-2.5 border border-gray-800">
+          <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">Symbols</div>
           <div className="text-lg font-bold text-white">{symbols.length}</div>
         </div>
-        <div className="bg-gray-900 rounded-lg px-4 py-2.5 border border-gray-800">
+        <div className="bg-gray-900 rounded-xl px-4 py-2.5 border border-gray-800">
           <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">Total ticks</div>
           <div className="text-lg font-bold text-white">{total.toLocaleString()}</div>
         </div>
       </div>
-
       <TableWrap>
         <thead>
           <tr>
@@ -430,39 +502,39 @@ export default function Database() {
     api('/api/history/stats')
       .then((res) => {
         const map  = res.data || {}
-        const syms = Object.keys(map).sort()
-        setSymbols(syms)
+        setSymbols(Object.keys(map).sort())
         setStatsMap(map)
       })
       .catch((e) => setLoadErr(e.message))
   }, [])
 
+  const totalTicks = Object.values(statsMap).reduce((s, v) => s + (v.ticks || 0), 0)
+
   return (
-    <div className="p-5 space-y-5">
-      {/* Page header */}
+    <div className="p-5 space-y-5 max-w-6xl mx-auto">
       <div className="flex items-center gap-3">
         <h2 className="text-base font-bold text-white">🗄️ Database Viewer</h2>
         {symbols.length > 0 && (
-          <span className="text-xs text-gray-600">{symbols.length} symbols · {Object.values(statsMap).reduce((s, v) => s + (v.ticks || 0), 0).toLocaleString()} total ticks</span>
+          <span className="text-xs text-gray-600">
+            {symbols.length} symbols · {totalTicks.toLocaleString()} ticks
+          </span>
         )}
       </div>
 
       {loadErr && (
-        <div className="text-sm text-red-400 bg-red-900/20 border border-red-800 rounded-lg px-4 py-2">
+        <div className="text-sm text-red-400 bg-red-900/20 border border-red-800 rounded-xl px-4 py-2">
           Failed to load stats: {loadErr}
         </div>
       )}
 
       {/* Sub-tab bar */}
-      <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-0.5 w-fit">
+      <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-0.5 w-fit">
         {DB_TABS.map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
-            className={`px-4 py-1.5 rounded text-xs font-semibold transition ${
-              activeTab === t.id
-                ? 'bg-gray-700 text-white'
-                : 'text-gray-500 hover:text-gray-300'
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+              activeTab === t.id ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'
             }`}
           >
             {t.label}
@@ -470,8 +542,7 @@ export default function Database() {
         ))}
       </div>
 
-      {/* Tab content */}
-      {activeTab === 'stats'   && <StatsTab    symbols={symbols} statsMap={statsMap} />}
+      {activeTab === 'stats'   && <StatsTab       symbols={symbols} statsMap={statsMap} />}
       {activeTab === 'prices'  && symbols.length > 0 && <PriceHistoryTab symbols={symbols} statsMap={statsMap} />}
       {activeTab === 'signals' && symbols.length > 0 && <SignalsTab      symbols={symbols} />}
       {(activeTab === 'prices' || activeTab === 'signals') && symbols.length === 0 && (

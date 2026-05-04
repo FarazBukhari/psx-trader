@@ -1,18 +1,17 @@
 /**
  * Charts — per-symbol price chart with 1D / 1W / 1M / 1Y timeframes.
  *
- * Data source: GET /api/history/stats (symbol list + tick counts)
- *              GET /api/history/{symbol}?n=2000&since={unix_ts}
+ * Symbol selection: searchable dropdown + recent symbols strip.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
   CartesianGrid, ReferenceLine,
 } from 'recharts'
 import { api } from '../api/client'
 
-// ── Timeframe config ─────────────────────────────────────────────────────────
+// ── Timeframe config ──────────────────────────────────────────────────────────
 
 const TIMEFRAMES = [
   { id: '1D', label: '1D', seconds: 24 * 3600 },
@@ -21,7 +20,9 @@ const TIMEFRAMES = [
   { id: '1Y', label: '1Y', seconds: 365 * 24 * 3600 },
 ]
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+const MAX_RECENT = 8
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtPrice(v) {
   return `PKR ${Number(v).toLocaleString('en-PK', { maximumFractionDigits: 2 })}`
@@ -34,12 +35,8 @@ function fmtAxis(v) {
 
 function fmtTimestamp(ts, tfId) {
   const d = new Date(ts * 1000)
-  if (tfId === '1D') {
-    return d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })
-  }
-  if (tfId === '1W') {
-    return d.toLocaleDateString('en-PK', { weekday: 'short', day: 'numeric' })
-  }
+  if (tfId === '1D') return d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })
+  if (tfId === '1W') return d.toLocaleDateString('en-PK', { weekday: 'short', day: 'numeric' })
   return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })
 }
 
@@ -48,7 +45,129 @@ function pctChange(first, last) {
   return ((last - first) / first * 100)
 }
 
-// ── Custom tooltip ────────────────────────────────────────────────────────────
+// ── Symbol search dropdown ────────────────────────────────────────────────────
+
+function SymbolSearch({ symbols, selected, onSelect }) {
+  const [query,    setQuery]    = useState('')
+  const [open,     setOpen]     = useState(false)
+  const [focused,  setFocused]  = useState(0)
+  const inputRef = useRef(null)
+  const listRef  = useRef(null)
+
+  const filtered = query.trim().length === 0
+    ? symbols
+    : symbols.filter((s) => s.includes(query.trim().toUpperCase()))
+
+  const choose = (sym) => {
+    onSelect(sym)
+    setQuery('')
+    setOpen(false)
+    setFocused(0)
+  }
+
+  const handleKey = (e) => {
+    if (!open) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setFocused((f) => Math.min(f + 1, filtered.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setFocused((f) => Math.max(f - 1, 0))
+    } else if (e.key === 'Enter' && filtered[focused]) {
+      choose(filtered[focused])
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+    }
+  }
+
+  // Scroll focused item into view
+  useEffect(() => {
+    const el = listRef.current?.children[focused]
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [focused])
+
+  return (
+    <div className="relative">
+      <div className={`flex items-center gap-2 bg-gray-900 border rounded-xl px-3 py-2 transition ${open ? 'border-blue-500' : 'border-gray-700'}`}>
+        <svg className="w-4 h-4 text-gray-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+        </svg>
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setOpen(true); setFocused(0) }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onKeyDown={handleKey}
+          placeholder={selected || 'Search symbol…'}
+          className="bg-transparent text-sm text-white placeholder-gray-500 outline-none w-36"
+        />
+        {selected && !query && (
+          <span className="text-xs font-bold text-blue-400 shrink-0">{selected}</span>
+        )}
+        <svg className={`w-3.5 h-3.5 text-gray-600 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+
+      {open && filtered.length > 0 && (
+        <div className="absolute z-50 mt-1 w-56 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+          <div
+            ref={listRef}
+            className="max-h-64 overflow-y-auto"
+          >
+            {filtered.map((sym, i) => (
+              <button
+                key={sym}
+                onMouseDown={() => choose(sym)}
+                className={`w-full text-left px-3 py-1.5 text-sm font-mono transition ${
+                  i === focused
+                    ? 'bg-blue-600 text-white'
+                    : sym === selected
+                    ? 'bg-gray-800 text-blue-400'
+                    : 'text-gray-300 hover:bg-gray-800'
+                }`}
+              >
+                {sym}
+              </button>
+            ))}
+          </div>
+          <div className="px-3 py-1.5 border-t border-gray-800 text-[10px] text-gray-600">
+            {filtered.length} of {symbols.length} symbols
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Recent symbols strip ──────────────────────────────────────────────────────
+
+function RecentStrip({ recent, selected, onSelect }) {
+  if (recent.length === 0) return null
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-gray-600 uppercase tracking-wider shrink-0">Recent</span>
+      <div className="flex gap-1.5 flex-wrap">
+        {recent.map((sym) => (
+          <button
+            key={sym}
+            onClick={() => onSelect(sym)}
+            className={`px-2.5 py-0.5 rounded-lg text-xs font-bold border transition ${
+              sym === selected
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
+            }`}
+          >
+            {sym}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Custom chart tooltip ──────────────────────────────────────────────────────
 
 function ChartTooltip({ active, payload, label, tfId }) {
   if (!active || !payload?.length) return null
@@ -60,21 +179,20 @@ function ChartTooltip({ active, payload, label, tfId }) {
         {d.open  != null && <><span className="text-gray-500">Open</span>  <span className="text-right font-mono">{d.open.toFixed(2)}</span></>}
         {d.high  != null && <><span className="text-gray-500">High</span>  <span className="text-right font-mono text-green-400">{d.high.toFixed(2)}</span></>}
         {d.low   != null && <><span className="text-gray-500">Low</span>   <span className="text-right font-mono text-red-400">{d.low.toFixed(2)}</span></>}
-        <span className="text-gray-500">Close</span><span className="text-right font-mono text-white">{d.close.toFixed(2)}</span>
+        <span className="text-gray-500">Close</span><span className="text-right font-mono text-white">{d.close?.toFixed(2)}</span>
         {d.volume != null && <><span className="text-gray-500">Vol</span>  <span className="text-right font-mono text-blue-300">{Number(d.volume).toLocaleString()}</span></>}
       </div>
     </div>
   )
 }
 
-// ── Mini stat card ────────────────────────────────────────────────────────────
+// ── Stat card ─────────────────────────────────────────────────────────────────
 
-function Stat({ label, value, sub, color }) {
+function Stat({ label, value, color }) {
   return (
-    <div className="bg-gray-900 rounded-lg px-4 py-2.5 border border-gray-800">
+    <div className="bg-gray-900 rounded-xl px-4 py-2.5 border border-gray-800">
       <div className="text-[10px] text-gray-600 uppercase tracking-wider mb-0.5">{label}</div>
       <div className={`text-sm font-mono font-bold ${color || 'text-white'}`}>{value}</div>
-      {sub && <div className="text-[10px] text-gray-600 mt-0.5">{sub}</div>}
     </div>
   )
 }
@@ -82,27 +200,34 @@ function Stat({ label, value, sub, color }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Charts() {
-  const [symbols,    setSymbols]    = useState([])   // from /api/history/stats
-  const [selected,   setSelected]   = useState(null)
-  const [tf,         setTf]         = useState('1D')
-  const [chartData,  setChartData]  = useState([])
-  const [loading,    setLoading]    = useState(false)
-  const [error,      setError]      = useState(null)
-  const [statsMap,   setStatsMap]   = useState({})   // symbol → {ticks, first_at, last_at}
+  const [symbols,   setSymbols]   = useState([])
+  const [statsMap,  setStatsMap]  = useState({})
+  const [selected,  setSelected]  = useState(null)
+  const [recent,    setRecent]    = useState([])   // recently viewed symbols
+  const [tf,        setTf]        = useState('1D')
+  const [chartData, setChartData] = useState([])
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState(null)
 
-  // Load symbol list from stats endpoint
+  // Load symbol list
   useEffect(() => {
     api('/api/history/stats')
       .then((res) => {
         const syms = Object.keys(res.data || {}).sort()
         setSymbols(syms)
         setStatsMap(res.data || {})
-        if (syms.length > 0 && !selected) setSelected(syms[0])
+        if (syms.length > 0) setSelected(syms[0])
       })
       .catch((e) => setError(e.message))
   }, [])
 
-  // Fetch chart data when symbol or timeframe changes
+  // Track recently viewed
+  const handleSelect = useCallback((sym) => {
+    setSelected(sym)
+    setRecent((prev) => [sym, ...prev.filter((s) => s !== sym)].slice(0, MAX_RECENT))
+  }, [])
+
+  // Fetch chart data
   const loadChart = useCallback(async (sym, tfId) => {
     if (!sym) return
     setLoading(true)
@@ -113,12 +238,12 @@ export default function Charts() {
       const res   = await api(`/api/history/${sym}?n=2000&since=${since}`)
       setChartData(res.data || [])
     } catch (e) {
-      if (e.status === 404) {
-        setChartData([])
-        setError(`No data for ${sym} in this timeframe. Run fetch-historical or wait for live ticks.`)
-      } else {
-        setError(e.message)
-      }
+      setChartData([])
+      setError(
+        e.status === 404
+          ? `No data for ${sym} in this timeframe. Run fetch-historical or wait for live ticks.`
+          : e.message,
+      )
     } finally {
       setLoading(false)
     }
@@ -128,118 +253,105 @@ export default function Charts() {
     if (selected) loadChart(selected, tf)
   }, [selected, tf, loadChart])
 
-  // Derived chart stats
-  const closes   = chartData.map((d) => d.close).filter(Boolean)
-  const highs    = chartData.map((d) => d.high).filter(Boolean)
-  const lows     = chartData.map((d) => d.low).filter(Boolean)
-  const first    = closes[0]
-  const last     = closes[closes.length - 1]
-  const chg      = pctChange(first, last)
-  const isUp     = chg == null ? true : chg >= 0
-  const high52   = highs.length ? Math.max(...highs) : null
-  const low52    = lows.length  ? Math.min(...lows)  : null
-  const avgVol   = chartData.length
+  // Chart-level stats
+  const closes = chartData.map((d) => d.close).filter(Boolean)
+  const highs  = chartData.map((d) => d.high).filter(Boolean)
+  const lows   = chartData.map((d) => d.low).filter(Boolean)
+  const first  = closes[0]
+  const last   = closes[closes.length - 1]
+  const chg    = pctChange(first, last)
+  const isUp   = chg == null ? true : chg >= 0
+  const stroke = isUp ? '#22c55e' : '#f97316'
+  const gradId = isUp ? 'grad-up' : 'grad-dn'
+  const avgVol = chartData.length
     ? Math.round(chartData.reduce((s, d) => s + (d.volume || 0), 0) / chartData.length)
     : null
-
-  const gradId  = isUp ? 'grad-up' : 'grad-dn'
-  const stroke  = isUp ? '#22c55e' : '#f97316'
-  const fillTop = isUp ? '#22c55e33' : '#f9731633'
-
   const stats = statsMap[selected] || {}
 
   return (
-    <div className="p-5 space-y-5">
-      {/* ── Header row ── */}
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-base font-bold text-white">📉 Price Charts</h2>
-        <span className="text-xs text-gray-600">—</span>
+    <div className="p-5 space-y-5 max-w-6xl mx-auto">
 
-        {/* Symbol selector */}
-        <div className="flex flex-wrap gap-1.5 flex-1">
-          {symbols.length === 0 && (
-            <span className="text-xs text-gray-600">Loading symbols…</span>
+      {/* ── Top bar: search + timeframe ── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3">
+          <h2 className="text-base font-bold text-white">📉 Price Charts</h2>
+          {symbols.length > 0 && (
+            <span className="text-xs text-gray-600">{symbols.length} symbols</span>
           )}
-          {symbols.map((sym) => (
-            <button
-              key={sym}
-              onClick={() => setSelected(sym)}
-              className={`px-2.5 py-0.5 rounded text-xs font-bold border transition ${
-                selected === sym
-                  ? 'bg-blue-600 border-blue-500 text-white'
-                  : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
-              }`}
-            >
-              {sym}
-            </button>
-          ))}
         </div>
 
-        {/* Timeframe buttons */}
-        <div className="flex gap-1 bg-gray-900 border border-gray-700 rounded-lg p-0.5">
-          {TIMEFRAMES.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTf(t.id)}
-              className={`px-3 py-1 rounded text-xs font-bold transition ${
-                tf === t.id
-                  ? 'bg-blue-600 text-white'
-                  : 'text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Search */}
+          <SymbolSearch symbols={symbols} selected={selected} onSelect={handleSelect} />
+
+          {/* Timeframe */}
+          <div className="flex gap-1 bg-gray-900 border border-gray-700 rounded-xl p-0.5">
+            {TIMEFRAMES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTf(t.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  tf === t.id
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* ── Ticker header ── */}
+      {/* ── Recent strip ── */}
+      <RecentStrip recent={recent} selected={selected} onSelect={handleSelect} />
+
+      {/* ── Ticker headline ── */}
       {selected && (
         <div className="flex flex-wrap items-baseline gap-4">
-          <span className="text-2xl font-black text-white">{selected}</span>
+          <span className="text-3xl font-black text-white">{selected}</span>
           {last != null && (
             <span className="text-xl font-mono text-gray-300">{fmtPrice(last)}</span>
           )}
           {chg != null && (
-            <span className={`text-sm font-bold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
+            <span className={`text-sm font-bold px-2 py-0.5 rounded-lg ${
+              isUp ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'
+            }`}>
               {isUp ? '+' : ''}{chg.toFixed(2)}% ({tf})
             </span>
           )}
         </div>
       )}
 
-      {/* ── Stat row ── */}
+      {/* ── Stat cards ── */}
       {selected && chartData.length > 0 && (
         <div className="flex flex-wrap gap-3">
-          {high52 != null && <Stat label={`${tf} High`}   value={high52.toFixed(2)}  color="text-green-400" />}
-          {low52  != null && <Stat label={`${tf} Low`}    value={low52.toFixed(2)}   color="text-red-400" />}
-          {avgVol != null && <Stat label="Avg Volume"      value={Number(avgVol).toLocaleString()} />}
-          {stats.ticks   != null && <Stat label="Ticks in DB" value={stats.ticks.toLocaleString()} />}
+          {highs.length > 0 && <Stat label={`${tf} High`}    value={Math.max(...highs).toFixed(2)} color="text-green-400" />}
+          {lows.length  > 0 && <Stat label={`${tf} Low`}     value={Math.min(...lows).toFixed(2)}  color="text-red-400" />}
+          {avgVol       != null && <Stat label="Avg Volume"   value={Number(avgVol).toLocaleString()} />}
+          {stats.ticks  != null && <Stat label="Ticks in DB"  value={stats.ticks.toLocaleString()} />}
         </div>
       )}
 
-      {/* ── Chart area ── */}
-      <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+      {/* ── Chart ── */}
+      <div className="bg-gray-900 rounded-2xl border border-gray-800 p-5">
         {loading && (
-          <div className="flex items-center justify-center h-64 text-gray-600 text-sm animate-pulse">
-            Loading…
+          <div className="flex items-center justify-center h-72 text-gray-600 text-sm animate-pulse">
+            Loading {selected}…
           </div>
         )}
-
         {!loading && error && (
-          <div className="flex items-center justify-center h-64 text-yellow-600 text-sm text-center px-8">
+          <div className="flex items-center justify-center h-72 text-yellow-600 text-sm text-center px-8">
             {error}
           </div>
         )}
-
         {!loading && !error && chartData.length === 0 && (
-          <div className="flex items-center justify-center h-64 text-gray-600 text-sm">
+          <div className="flex items-center justify-center h-72 text-gray-600 text-sm">
             No data in this timeframe.
           </div>
         )}
-
         {!loading && !error && chartData.length > 0 && (
-          <ResponsiveContainer width="100%" height={320}>
+          <ResponsiveContainer width="100%" height={340}>
             <AreaChart data={chartData} margin={{ top: 8, right: 12, bottom: 0, left: 8 }}>
               <defs>
                 <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -268,10 +380,7 @@ export default function Charts() {
               {first != null && (
                 <ReferenceLine y={first} stroke="#374151" strokeDasharray="4 3" />
               )}
-              <Tooltip
-                content={<ChartTooltip tfId={tf} />}
-                isAnimationActive={false}
-              />
+              <Tooltip content={<ChartTooltip tfId={tf} />} isAnimationActive={false} />
               <Area
                 type="monotone"
                 dataKey="close"
@@ -286,10 +395,9 @@ export default function Charts() {
         )}
       </div>
 
-      {/* ── Data tip ── */}
       <p className="text-[11px] text-gray-700">
-        Live ticks accumulate every 15s during market hours.
-        For 1W / 1M / 1Y, run <code className="bg-gray-800 px-1 rounded">python -m scripts.fetch_historical</code> to populate EOD history.
+        Live ticks every 15s during market hours. For 1W / 1M / 1Y run{' '}
+        <code className="bg-gray-800 px-1 rounded">python -m scripts.fetch_historical</code>.
       </p>
     </div>
   )
