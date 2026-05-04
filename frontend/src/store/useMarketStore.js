@@ -7,9 +7,10 @@
  *
  * Signal shape:
  *   { symbol, sector, current, change_pct, volume, rsi, sma5, sma20,
- *     signal, action_score, signal_sources, signal_changed, prev_signal,
- *     prediction: { direction, confidence, hold_days, risk_level,
- *                   reward_risk, basis } }
+ *     signal, action_score, signal_sources, signal_changed, prev_signal, stale,
+ *     prediction: { direction, confidence, hold_days, risk,       // backend key: "risk" (lowercase values)
+ *                   reward_risk_ratio, basis, trade_action,        // backend key: "reward_risk_ratio"
+ *                   expected_move_pct, time_horizon } }
  */
 
 import { create } from 'zustand'

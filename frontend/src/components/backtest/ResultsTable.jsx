@@ -12,7 +12,7 @@ function ccy(v)  { return v != null ? `PKR ${Number(v).toLocaleString('en-PK', {
 const COLUMNS = [
   { key: 'strategy',         label: 'Strategy' },
   { key: 'return_pct',       label: 'Return %',       fmt: pct,   color: true },
-  { key: 'win_rate',         label: 'Win Rate',        fmt: (v) => pct((v ?? 0) * 100) },
+  { key: 'win_rate',         label: 'Win Rate',        fmt: (v) => pct(v) },   // backend already 0-100
   { key: 'profit_factor',    label: 'Profit Factor',   fmt: (v) => num(v), color: true, threshold: 1 },
   { key: 'max_drawdown_pct', label: 'Max DD %',        fmt: (v) => v != null ? `-${Math.abs(v).toFixed(2)}%` : '—', negative: true },
   { key: 'sharpe_ratio',     label: 'Sharpe',          fmt: (v) => num(v) },
@@ -22,6 +22,11 @@ const COLUMNS = [
   { key: 'final_equity',     label: 'Final Equity',    fmt: ccy },
   { key: 'ticks_used',       label: 'Ticks',           fmt: (v) => v ?? '—' },
 ]
+
+const SKIP_LABELS = {
+  insufficient_data: 'No historical data',
+  low_liquidity:     'Low liquidity',
+}
 
 function cellColor(col, value) {
   if (!col.color && !col.negative) return 'text-gray-200'
@@ -52,25 +57,41 @@ export default function ResultsTable({ results = [] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-800/50">
-          {rows.map((row, i) => (
-            <tr key={i} className="hover:bg-gray-800/40 transition-colors">
-              {COLUMNS.map((col) => {
-                const raw = row[col.key]
-                const display = col.fmt ? col.fmt(raw) : (raw ?? '—')
-                return (
-                  <td
-                    key={col.key}
-                    className={clsx(
-                      'px-3 py-2.5 font-mono tabular-nums text-sm',
-                      cellColor(col, raw),
-                    )}
-                  >
-                    {display}
-                  </td>
-                )
-              })}
-            </tr>
-          ))}
+          {rows.map((row, i) => {
+            const skipped = row.skipped
+            return (
+              <tr
+                key={i}
+                className={clsx(
+                  'hover:bg-gray-800/40 transition-colors',
+                  skipped && 'opacity-60',
+                )}
+              >
+                {COLUMNS.map((col) => {
+                  const raw = row[col.key]
+                  const display = col.fmt ? col.fmt(raw) : (raw ?? '—')
+                  return (
+                    <td
+                      key={col.key}
+                      className={clsx(
+                        'px-3 py-2.5 font-mono tabular-nums text-sm',
+                        cellColor(col, raw),
+                      )}
+                    >
+                      {col.key === 'strategy' && skipped ? (
+                        <span className="flex items-center gap-2 flex-wrap">
+                          <span>{display}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-900/40 text-yellow-400 border border-yellow-800 font-sans">
+                            {SKIP_LABELS[skipped] ?? skipped}
+                          </span>
+                        </span>
+                      ) : display}
+                    </td>
+                  )
+                })}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

@@ -104,6 +104,9 @@ export default function BacktestPanel() {
       : result.results || []
     : []
 
+  // True when every result row was skipped (no data / low liquidity)
+  const allSkipped = resultRows.length > 0 && resultRows.every((r) => r.skipped)
+
   // Pick equity curve for single mode
   const equityCurve  = result?.equity_curve || null
   const startingCash = result?.starting_cash || cfg.starting_cash
@@ -193,6 +196,21 @@ export default function BacktestPanel() {
           </div>
 
           <ResultsTable results={resultRows} />
+
+          {allSkipped && (
+            <div className="px-4 py-3 bg-yellow-900/20 border border-yellow-800/50 rounded-lg text-xs text-yellow-300 space-y-1">
+              <div className="font-semibold">No historical data found for {result.symbol}</div>
+              <div className="text-yellow-500">
+                Fetch EOD history first — run this command from the <code className="bg-black/30 px-1 rounded">backend/</code> directory:
+              </div>
+              <code className="block bg-black/40 px-3 py-2 rounded font-mono text-yellow-200 mt-1">
+                python -m scripts.fetch_historical --symbols {result.symbol}
+              </code>
+              <div className="text-yellow-600 pt-0.5">
+                Or trigger via API: <code className="bg-black/30 px-1 rounded">POST /api/system/fetch-historical?symbols={result.symbol}</code>
+              </div>
+            </div>
+          )}
 
           {/* Equity curve (single mode only) */}
           {equityCurve?.length > 1 && (

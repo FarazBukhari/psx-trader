@@ -16,7 +16,7 @@ function fmtCcy(v) {
 }
 
 export default function EquityChart({ equityCurve = [], startingCash = null, label = '' }) {
-  if (!equityCurve || equityCurve.length < 2) {
+  if (!Array.isArray(equityCurve) || equityCurve.length < 2) {
     return (
       <div className="flex items-center justify-center h-28 text-gray-600 text-xs">
         No equity curve data.
@@ -24,7 +24,12 @@ export default function EquityChart({ equityCurve = [], startingCash = null, lab
     )
   }
 
-  const data = equityCurve.map(([ts, val]) => ({ ts, val }))
+  // Backend returns objects: {ts, equity, price, cash}
+  // (older shape was [ts, val] tuples — handle both for safety)
+  const data = equityCurve.map((item) => ({
+    ts:  Array.isArray(item) ? item[0] : item.ts,
+    val: Array.isArray(item) ? item[1] : (item.equity ?? item.val ?? 0),
+  }))
   const first = data[0].val
   const last  = data[data.length - 1].val
   const isUp  = last >= first

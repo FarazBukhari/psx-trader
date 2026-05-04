@@ -45,6 +45,13 @@ if not rows:
 snap_age = time.time() - snap.get("saved_at", 0)
 print(f"Snapshot: {len(rows)} stocks, age {snap_age:.0f}s")
 
+MAX_SNAPSHOT_AGE = 300   # seconds — refuse to write stale levels
+if snap_age > MAX_SNAPSHOT_AGE:
+    print(f"✗  Snapshot is {snap_age:.0f}s old (max allowed: {MAX_SNAPSHOT_AGE}s).")
+    print("   The PSX backend is likely not running or has not refreshed recently.")
+    print("   strategy.json was NOT updated. Start the backend and retry.")
+    raise SystemExit(1)
+
 # ── Build symbol levels ───────────────────────────────────────────────────────
 symbols = {}
 skipped = []

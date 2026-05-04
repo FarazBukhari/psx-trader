@@ -8,6 +8,8 @@ import { useUIStore } from '../../store/useUIStore'
 const TABS = [
   { id: 'dashboard',   label: '📊 Dashboard' },
   { id: 'portfolio',   label: '💼 Portfolio' },
+  { id: 'charts',      label: '📉 Charts' },
+  { id: 'database',    label: '🗄️ Database' },
   { id: 'backtest',    label: '📈 Backtest' },
   { id: 'performance', label: '🎯 Performance' },
 ]

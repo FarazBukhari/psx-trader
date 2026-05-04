@@ -9,6 +9,8 @@ import { useUIStore }   from './store/useUIStore'
 import Header           from './components/layout/Header'
 import Dashboard        from './pages/Dashboard'
 import Portfolio        from './pages/Portfolio'
+import Charts           from './pages/Charts'
+import Database         from './pages/Database'
 import Backtest         from './pages/Backtest'
 import Performance      from './pages/Performance'
 
@@ -18,6 +20,8 @@ function Pages() {
     <main className="flex-1 overflow-auto">
       {tab === 'dashboard'   && <Dashboard />}
       {tab === 'portfolio'   && <Portfolio />}
+      {tab === 'charts'      && <Charts />}
+      {tab === 'database'    && <Database />}
       {tab === 'backtest'    && <Backtest />}
       {tab === 'performance' && <Performance />}
     </main>

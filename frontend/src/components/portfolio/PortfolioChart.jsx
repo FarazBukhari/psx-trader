@@ -28,10 +28,13 @@ export default function PortfolioChart() {
     )
   }
 
-  const baseline = history[0].value
-  const last     = history[history.length - 1].value
-  const isUp     = last >= baseline
+  const baseline  = history[0].value
+  const last      = history[history.length - 1].value
+  const isUp      = last >= baseline
   const lineColor = isUp ? '#22c55e' : '#f97316'
+  const pctChange = baseline > 0
+    ? ((last - baseline) / baseline * 100).toFixed(2)
+    : null
 
   return (
     <div>
@@ -40,7 +43,9 @@ export default function PortfolioChart() {
           Session Equity Curve
         </span>
         <span className={`text-xs font-mono font-semibold ${isUp ? 'text-green-400' : 'text-red-400'}`}>
-          {isUp ? '+' : ''}{((last - baseline) / baseline * 100).toFixed(2)}% session
+          {pctChange !== null
+            ? `${isUp ? '+' : ''}${pctChange}% session`
+            : '— session'}
         </span>
       </div>
       <ResponsiveContainer width="100%" height={100}>
