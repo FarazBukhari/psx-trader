@@ -2,12 +2,12 @@
 REST API routes — served by FastAPI.
 
 Endpoints:
-  GET  /api/stocks         → latest raw stock data
-  GET  /api/signals        → latest enriched signals
-  GET  /api/signals/{sym}  → signal for a specific symbol
-  GET  /api/status         → system health + market status + stale flag
-  POST /api/config/reload  → hot-reload strategy.json
-  POST /api/horizon/{mode} → switch scoring horizon (short | long)
+  GET  /api/stocks            → latest raw stock data
+  GET  /api/signals           → latest enriched signals
+  GET  /api/signals/{sym}     → signal for a specific symbol
+  GET  /api/status            → system health + market status + stale flag
+  POST /api/strategy/{name}   → switch active strategy preset
+  POST /api/config/reload     → hot-reload strategy.json
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ async def get_status():
         "data_source":    app_state.data_source,
         "data_stale":     app_state.data_stale,
         "stale_reason":   app_state.stale_reason,
-        "horizon":        app_state.horizon,
+        "strategy":       app_state.strategy,
         "uptime_seconds": round(time.time() - app_state.started_at, 1),
         "market": {
             "state":      mkt.state.value,
@@ -92,17 +92,59 @@ async def get_status():
     }
 
 
-@router.post("/horizon/{mode}")
-async def set_horizon(mode: str):
-    if mode not in ("short", "long"):
-        raise HTTPException(status_code=400, detail="horizon must be 'short' or 'long'")
-    app_state.horizon = mode
-    # Immediately recompute scores with new horizon
-    from ..strategy.signal_engine import compute_action_score
-    for sym, sig in app_state.signals.items():
-        sig["action_score"] = compute_action_score(sig, mode)
-        sig["horizon"] = mode
-    return {"horizon": mode, "message": f"Switched to {mode}-term scoring"}
+@router.post("/strategy/{name}")
+async def set_strategy(name: str):
+    from ..strategy.backtester import get_preset, preset_to_horizon, VALID_PRESETS
+    from ..strategy.signal_engine import SignalConfig
+    from ..websocket.manager import manager
+
+    if name not in VALID_PRESETS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"strategy must be one of {sorted(VALID_PRESETS)}",
+        )
+
+    preset  = get_preset(name)
+    horizon = preset_to_horizon(name)
+
+    # Build and cache the new SignalConfig on app state
+    app_state.strategy   = name
+    app_state.signal_cfg = SignalConfig(
+        rsi_period=preset.rsi_period,
+        rsi_oversold=preset.rsi_oversold,
+        rsi_overbought=preset.rsi_overbought,
+        sma_short=preset.sma_short,
+        sma_long=preset.sma_long,
+        change_pct_threshold=preset.change_pct_threshold,
+    )
+
+    # Reprocess all cached signals immediately with new config
+    if app_state.signals:
+        stocks  = list(app_state.signals.values())
+        updated = app_state.engine.process(
+            stocks,
+            signal_cfg=app_state.signal_cfg,
+            horizon=horizon,
+        )
+        for sig in updated:
+            sig["strategy"] = name
+            app_state.signals[sig["symbol"]] = sig
+
+        # Broadcast immediately — no waiting for next scrape tick
+        await manager.broadcast({
+            "type":         "snapshot",
+            "timestamp":    app_state.last_update,
+            "source":       app_state.data_source,
+            "stale":        app_state.data_stale,
+            "stale_reason": app_state.stale_reason,
+            "strategy":     name,
+            "config_at":    app_state.config_loaded_at,
+            "all":          list(app_state.signals.values()),
+            "changed":      [],
+            "client_count": app_state.ws_clients,
+        })
+
+    return {"strategy": name, "message": f"Switched to {name} strategy"}
 
 
 @router.post("/config/reload")

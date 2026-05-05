@@ -5,8 +5,8 @@
  * Shows every field the backend sends:
  *   Prediction: direction, confidence, trade_action, time_horizon, hold_days,
  *               risk, expected_move_pct, reward_risk_ratio, basis
- *   Signal:     signal, prev_signal, signal_sources, action_score, horizon,
- *               rsi, sma5, sma20
+ *   Signal:     signal, prev_signal, signal_sources, action_score,
+ *               rsi, sma5 (short SMA for active preset), sma20 (long SMA)
  *   OHLC:       current, ldcp, open, high, low
  */
 
@@ -80,7 +80,6 @@ export default function PredictionPanel({ signal }) {
   const sma5        = signal?.sma5
   const sma20       = signal?.sma20
   const actionScore = signal?.action_score
-  const horizon     = signal?.horizon
 
   // OHLC
   const current = signal?.current
@@ -197,13 +196,12 @@ export default function PredictionPanel({ signal }) {
           </div>
 
           <Stat label="Action Score" value={actionScore != null ? Math.round(actionScore) : null} className="font-mono text-gray-300" />
-          <Stat label="Horizon"      value={horizon?.toUpperCase()} className="text-blue-400" />
           <Stat label="RSI (14)"
             value={rsi != null ? rsi.toFixed(1) : null}
             className={rsi == null ? 'text-gray-600' : rsi <= 30 ? 'text-green-400 font-bold' : rsi >= 70 ? 'text-red-400 font-bold' : 'text-gray-300'}
           />
-          <Stat label="SMA 5"  value={sma5  != null ? sma5.toFixed(2)  : null} className="font-mono text-gray-300" />
-          <Stat label="SMA 20" value={sma20 != null ? sma20.toFixed(2) : null} className="font-mono text-gray-300" />
+          <Stat label="SMA Short" value={sma5  != null ? sma5.toFixed(2)  : null} className="font-mono text-gray-300" />
+          <Stat label="SMA Long"  value={sma20 != null ? sma20.toFixed(2) : null} className="font-mono text-gray-300" />
 
         </div>
 

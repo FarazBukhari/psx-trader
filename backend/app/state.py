@@ -9,7 +9,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .strategy.signal_engine import SignalEngine
+from .strategy.signal_engine import SignalEngine, SignalConfig
 from .db.history_store import HistoryStore
 from .portfolio.portfolio_manager import PortfolioManager
 from .prediction.prediction_engine import PredictionEngine
@@ -24,7 +24,8 @@ class AppState:
     ws_clients: int = 0
     started_at: float = field(default_factory=time.time)
     engine: SignalEngine = field(default_factory=SignalEngine)
-    horizon: str = "short"   # "short" | "long" — set by frontend via API
+    strategy: str = "default"       # active preset: conservative|default|aggressive|momentum
+    signal_cfg: SignalConfig = field(default_factory=SignalConfig)  # cached from active preset
     config_loaded_at: Optional[float] = None
     # Phase 2: persistent history store
     history_store: HistoryStore = field(default_factory=HistoryStore)

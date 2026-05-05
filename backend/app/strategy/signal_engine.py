@@ -15,11 +15,27 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from collections import deque
+from dataclasses import dataclass
 from typing import Optional
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Signal configuration (mirrors StrategyConfig in backtester, but lighter)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class SignalConfig:
+    """Thresholds used by the live signal engine. Populated from a preset."""
+    rsi_period:           int   = 14
+    rsi_oversold:         float = 30.0
+    rsi_overbought:       float = 70.0
+    sma_short:            int   = 5
+    sma_long:             int   = 20
+    change_pct_threshold: float = 3.0
 
 # ---------------------------------------------------------------------------
 # Config loader
@@ -80,10 +96,11 @@ class BaseStrategy(ABC):
     name: str = "base"
 
     @abstractmethod
-    def evaluate(self, stock: dict, config: dict) -> Optional[str]:
+    def evaluate(self, stock: dict, config: dict, signal_cfg: SignalConfig = None) -> Optional[str]:
         """
         Return "BUY", "SELL", "FORCE_SELL", "HOLD", or None (abstain).
         None means this strategy has no opinion for this stock.
+        signal_cfg carries the active preset thresholds (RSI, SMA, change %).
         """
 
 
@@ -94,7 +111,7 @@ class BaseStrategy(ABC):
 class PriceThresholdStrategy(BaseStrategy):
     name = "price_threshold"
 
-    def evaluate(self, stock: dict, config: dict) -> Optional[str]:
+    def evaluate(self, stock: dict, config: dict, signal_cfg: SignalConfig = None) -> Optional[str]:
         sym = stock["symbol"]
         cfg = config.get("symbols", {}).get(sym)
         if not cfg:
@@ -124,7 +141,7 @@ class PriceThresholdStrategy(BaseStrategy):
 class VolumeSpikeStrategy(BaseStrategy):
     name = "volume_spike"
 
-    def evaluate(self, stock: dict, config: dict) -> Optional[str]:
+    def evaluate(self, stock: dict, config: dict, signal_cfg: SignalConfig = None) -> Optional[str]:
         gcfg = config.get("global", {})
         if not gcfg.get("enable_volume_filter", True):
             return None
@@ -146,12 +163,13 @@ class VolumeSpikeStrategy(BaseStrategy):
 class ChangePctStrategy(BaseStrategy):
     name = "change_pct"
 
-    def evaluate(self, stock: dict, config: dict) -> Optional[str]:
+    def evaluate(self, stock: dict, config: dict, signal_cfg: SignalConfig = None) -> Optional[str]:
         gcfg = config.get("global", {})
         if not gcfg.get("enable_change_pct_filter", True):
             return None
 
-        threshold = gcfg.get("change_pct_alert_threshold", 3.0)
+        cfg = signal_cfg or SignalConfig()
+        threshold = cfg.change_pct_threshold
         chg = stock.get("change_pct", 0)
 
         if chg <= -threshold:
@@ -167,23 +185,25 @@ class ChangePctStrategy(BaseStrategy):
 
 class SMACrossoverStrategy(BaseStrategy):
     name = "sma_crossover"
-    SHORT = 5
-    LONG  = 20
 
-    def evaluate(self, stock: dict, config: dict) -> Optional[str]:
+    def evaluate(self, stock: dict, config: dict, signal_cfg: SignalConfig = None) -> Optional[str]:
         sym = stock["symbol"]
-        if price_buffer.len(sym) < self.LONG:
+        cfg   = signal_cfg or SignalConfig()
+        SHORT = cfg.sma_short
+        LONG  = cfg.sma_long
+
+        if price_buffer.len(sym) < LONG:
             return None  # Not enough data yet
 
         prices = np.array(price_buffer.get(sym))
-        sma_short = float(np.mean(prices[-self.SHORT:]))
-        sma_long  = float(np.mean(prices[-self.LONG:]))
+        sma_short = float(np.mean(prices[-SHORT:]))
+        sma_long  = float(np.mean(prices[-LONG:]))
 
         # Prev tick crossover check
-        if price_buffer.len(sym) > self.LONG:
+        if price_buffer.len(sym) > LONG:
             prev = prices[:-1]
-            prev_short = float(np.mean(prev[-self.SHORT:]))
-            prev_long  = float(np.mean(prev[-self.LONG:]))
+            prev_short = float(np.mean(prev[-SHORT:]))
+            prev_long  = float(np.mean(prev[-LONG:]))
         else:
             prev_short = sma_short
             prev_long  = sma_long
@@ -201,22 +221,21 @@ class SMACrossoverStrategy(BaseStrategy):
 
 class RSIStrategy(BaseStrategy):
     name = "rsi"
-    PERIOD = 14
-    OVERSOLD   = 30
-    OVERBOUGHT = 70
 
-    def evaluate(self, stock: dict, config: dict) -> Optional[str]:
+    def evaluate(self, stock: dict, config: dict, signal_cfg: SignalConfig = None) -> Optional[str]:
         sym = stock["symbol"]
-        if price_buffer.len(sym) < self.PERIOD + 1:
+        cfg = signal_cfg or SignalConfig()
+
+        if price_buffer.len(sym) < cfg.rsi_period + 1:
             return None
 
-        prices = np.array(price_buffer.get(sym, self.PERIOD + 1))
+        prices = np.array(price_buffer.get(sym, cfg.rsi_period + 1))
         deltas = np.diff(prices)
         gains  = np.where(deltas > 0, deltas, 0)
         losses = np.where(deltas < 0, -deltas, 0)
 
-        avg_gain = np.mean(gains[-self.PERIOD:])
-        avg_loss = np.mean(losses[-self.PERIOD:])
+        avg_gain = np.mean(gains[-cfg.rsi_period:])
+        avg_loss = np.mean(losses[-cfg.rsi_period:])
 
         if avg_loss == 0:
             rsi = 100.0
@@ -226,9 +245,9 @@ class RSIStrategy(BaseStrategy):
 
         stock["_rsi"] = round(rsi, 1)  # attach for API response
 
-        if rsi <= self.OVERSOLD:
+        if rsi <= cfg.rsi_oversold:
             return "BUY"
-        if rsi >= self.OVERBOUGHT:
+        if rsi >= cfg.rsi_overbought:
             return "SELL"
         return None
 
@@ -404,12 +423,21 @@ class SignalEngine:
         self.config = load_config(config_path)
         logger.info("Strategy config reloaded")
 
-    def process(self, stocks: list[dict], horizon: str = "short") -> list[dict]:
+    def process(
+        self,
+        stocks: list[dict],
+        signal_cfg: SignalConfig = None,
+        horizon: str = "long",
+    ) -> list[dict]:
         """
         Takes a list of stock dicts (from scraper) and returns enriched
         dicts with 'signal', 'signal_sources', action_score, and indicator fields.
-        horizon: "short" (default) or "long"
+
+        signal_cfg: active preset thresholds — built from app_state.signal_cfg.
+        horizon:    internal scoring mode derived via preset_to_horizon(); callers
+                    should not set this directly — use set_strategy() instead.
         """
+        cfg = signal_cfg or SignalConfig()
         results = []
         for stock in stocks:
             sym = stock["symbol"]
@@ -422,7 +450,7 @@ class SignalEngine:
             sources: list[str]  = []
             for strategy in STRATEGY_REGISTRY:
                 try:
-                    opinion = strategy.evaluate(stock, self.config)
+                    opinion = strategy.evaluate(stock, self.config, cfg)
                     if opinion:
                         opinions.append(opinion)
                         sources.append(strategy.name)
@@ -443,11 +471,12 @@ class SignalEngine:
                 "signal_changed":  changed,
                 "prev_signal":     prev or "—",
                 "rsi":             stock.pop("_rsi", None),
-                "sma5":            self._sma(sym, 5),
-                "sma20":           self._sma(sym, 20),
+                # sma5/sma20 keys kept for DB/history compatibility;
+                # values now reflect the active preset's SMA windows
+                "sma5":            self._sma(sym, cfg.sma_short),
+                "sma20":           self._sma(sym, cfg.sma_long),
             }
             enriched["action_score"] = compute_action_score(enriched, horizon)
-            enriched["horizon"] = horizon
             results.append(enriched)
 
         return results

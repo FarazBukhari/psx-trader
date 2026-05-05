@@ -33,6 +33,7 @@ from .db import init_db
 from .logger import setup_logging
 from .scraper.psx_scraper import PSXScraper
 from .state import app_state
+from .strategy.backtester import get_preset, preset_to_horizon
 from .strategy.signal_engine import price_buffer
 from .websocket.manager import manager
 
@@ -121,7 +122,12 @@ async def _poll_loop(scraper: PSXScraper):
     while True:
         try:
             stocks  = await scraper.fetch()
-            signals = app_state.engine.process(stocks, horizon=app_state.horizon)
+            _horizon = preset_to_horizon(app_state.strategy)
+            signals = app_state.engine.process(
+                stocks,
+                signal_cfg=app_state.signal_cfg,
+                horizon=_horizon,
+            )
 
             # Phase 3: enrich signals with forward-looking prediction metadata
             signals = app_state.prediction_engine.enrich_batch(signals)
@@ -172,7 +178,7 @@ async def _poll_loop(scraper: PSXScraper):
                 "source":       app_state.data_source,
                 "stale":        app_state.data_stale,
                 "stale_reason": app_state.stale_reason,
-                "horizon":      app_state.horizon,
+                "strategy":     app_state.strategy,
                 "config_at":    app_state.config_loaded_at,
                 "all":          signals,
                 "changed":      changed,
@@ -226,7 +232,11 @@ async def lifespan(app: FastAPI):
     # ── Step 4: live warm-up fetch ────────────────────────────────────
     try:
         stocks  = await scraper.fetch()
-        signals = app_state.engine.process(stocks, horizon=app_state.horizon)
+        signals = app_state.engine.process(
+            stocks,
+            signal_cfg=app_state.signal_cfg,
+            horizon=preset_to_horizon(app_state.strategy),
+        )
         # Phase 3: enrich warm-up signals with predictions
         signals = app_state.prediction_engine.enrich_batch(signals)
         for s in stocks:
@@ -306,7 +316,7 @@ async def websocket_endpoint(ws: WebSocket):
             "source":       app_state.data_source,
             "stale":        app_state.data_stale,
             "stale_reason": app_state.stale_reason,
-            "horizon":      app_state.horizon,
+            "strategy":     app_state.strategy,
             "config_at":    app_state.config_loaded_at,
             "all":          list(app_state.signals.values()),
         })

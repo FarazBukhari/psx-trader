@@ -879,3 +879,18 @@ PRESET_VARIANTS: list[StrategyConfig] = [
         change_pct_threshold=1.5,
     ),
 ]
+
+VALID_PRESETS = {p.name for p in PRESET_VARIANTS}
+
+
+def get_preset(name: str) -> StrategyConfig:
+    """Return a preset StrategyConfig by name. Falls back to 'default'."""
+    for p in PRESET_VARIANTS:
+        if p.name == name:
+            return p
+    return next(p for p in PRESET_VARIANTS if p.name == "default")
+
+
+def preset_to_horizon(name: str) -> str:
+    """Map preset name to internal scoring horizon for compute_action_score."""
+    return "short" if name in ("aggressive", "momentum") else "long"

@@ -303,7 +303,7 @@ def _signal_to_row(s: dict) -> dict:
         "signal_changed": bool(s.get("signal_changed", False)),
         "signal_sources": json.dumps(sources) if sources else None,
         "action_score":   s.get("action_score"),
-        "horizon":        s.get("horizon", "short"),
+        "horizon":        "default",   # DB column kept; value no longer signal-derived
         "rsi":            s.get("rsi"),
         "sma5":           s.get("sma5"),
         "sma20":          s.get("sma20"),

@@ -28,7 +28,7 @@ def setup_logging(level: str = "INFO", log_to_file: bool = True):
     sh.setFormatter(fmt)
     root.addHandler(sh)
 
-    # Rotating file handler
+    # Rotating file handler — all levels
     if log_to_file:
         fh = logging.handlers.RotatingFileHandler(
             LOG_DIR / "psx_signals.log",
@@ -38,6 +38,17 @@ def setup_logging(level: str = "INFO", log_to_file: bool = True):
         )
         fh.setFormatter(fmt)
         root.addHandler(fh)
+
+        # Error-only handler — logs/errors.txt (2 MB rotating, 3 backups)
+        eh = logging.handlers.RotatingFileHandler(
+            LOG_DIR / "errors.txt",
+            maxBytes=2 * 1024 * 1024,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        eh.setLevel(logging.ERROR)
+        eh.setFormatter(fmt)
+        root.addHandler(eh)
 
     # Silence noisy libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)

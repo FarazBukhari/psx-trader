@@ -1,6 +1,7 @@
 /**
- * Header — app header with tabs, market status, horizon toggle, WS badge.
+ * Header — app header with tabs, market status, WS badge.
  * Also renders the stale-data banner and the global toast.
+ * Strategy selector lives on the Dashboard page.
  */
 
 import { useEffect, useState, useCallback } from 'react'
@@ -8,7 +9,7 @@ import clsx from 'clsx'
 import Tabs from './Tabs'
 import { useMarketStore } from '../../store/useMarketStore'
 import { useUIStore }     from '../../store/useUIStore'
-import { setHorizon as apiSetHorizon, getSystemStatus } from '../../api/system'
+import { getSystemStatus } from '../../api/system'
 
 // ── Market countdown timer ────────────────────────────────────────────────────
 function useCountdown(targetSeconds) {
@@ -73,11 +74,9 @@ export default function Header() {
   const wsStatus        = useMarketStore((s) => s.wsStatus)
   const connectionStatus = useMarketStore((s) => s.connectionStatus)
   const latency         = useMarketStore((s) => s.latency)
-  const horizon    = useMarketStore((s) => s.horizon)
-  const dataStale  = useMarketStore((s) => s.dataStale)
-  const staleReason= useMarketStore((s) => s.staleReason)
-  const lastUpdate = useMarketStore((s) => s.lastUpdate)
-  const setHorizonStore = useMarketStore((s) => s.setHorizon)
+  const dataStale       = useMarketStore((s) => s.dataStale)
+  const staleReason     = useMarketStore((s) => s.staleReason)
+  const lastUpdate      = useMarketStore((s) => s.lastUpdate)
   const setSystemStatus = useMarketStore((s) => s.setSystemStatus)
   const systemStatus    = useMarketStore((s) => s.systemStatus)
 
@@ -113,15 +112,6 @@ export default function Header() {
   const isOpen      = mkt?.is_open
   const countdown   = useCountdown(isOpen ? secsToClose : secsToOpen)
 
-  const handleHorizon = async (h) => {
-    setHorizonStore(h)
-    try {
-      await apiSetHorizon(h)
-    } catch (e) {
-      showToast(`Failed to switch horizon: ${e.message}`, 'error')
-    }
-  }
-
   return (
     <>
       {/* ── App bar ── */}
@@ -143,24 +133,6 @@ export default function Header() {
 
           {/* Right controls */}
           <div className="flex items-center gap-3 shrink-0">
-            {/* Horizon toggle */}
-            <div className="flex items-center gap-1 bg-gray-900 border border-gray-700 rounded-lg p-0.5">
-              {['short', 'long'].map((h) => (
-                <button
-                  key={h}
-                  onClick={() => handleHorizon(h)}
-                  className={clsx(
-                    'px-3 py-1 rounded text-xs font-bold transition',
-                    horizon === h
-                      ? h === 'short' ? 'bg-blue-600 text-white' : 'bg-purple-600 text-white'
-                      : 'text-gray-500 hover:text-gray-300',
-                  )}
-                >
-                  {h === 'short' ? '⚡ SHORT' : '📅 LONG'}
-                </button>
-              ))}
-            </div>
-
             {/* Market status */}
             {mkt && (
               <div className={clsx(

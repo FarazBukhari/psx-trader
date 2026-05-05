@@ -2,7 +2,7 @@
  * useMarketStore — live WebSocket data + market state.
  *
  * Shape of WS message (type=snapshot|update):
- *   { all: Signal[], timestamp, source, client_count, horizon,
+ *   { all: Signal[], timestamp, source, client_count, strategy,
  *     config_at, stale, stale_reason, changed: Signal[] }
  *
  * Signal shape:
@@ -30,7 +30,7 @@ export const useMarketStore = create((set) => ({
   wsClients: 0,
 
   // Market / config
-  horizon: 'short',
+  strategy: 'default',
   configLoadedAt: null,
   dataStale: false,
   staleReason: null,
@@ -58,13 +58,13 @@ export const useMarketStore = create((set) => ({
       lastUpdate:     data.timestamp  ? data.timestamp * 1000 : Date.now(),
       source:         data.source     || 'unknown',
       wsClients:      data.client_count || 0,
-      horizon:        data.horizon    || 'short',
+      strategy:       data.strategy   || 'default',
       configLoadedAt: data.config_at  || null,
       dataStale:      data.stale      || false,
       staleReason:    data.stale_reason || null,
     }),
 
-  setHorizon:      (horizon)       => set({ horizon }),
+  setStrategy:     (strategy)      => set({ strategy }),
   setSystemStatus: (systemStatus)  => set({ systemStatus }),
 
   // Returns signal for a given symbol (or null)

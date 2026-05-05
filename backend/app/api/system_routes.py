@@ -297,7 +297,7 @@ async def get_system_status():
     system_block = {
         "uptime_seconds": round(now - app_state.started_at, 1),
         "ws_clients":     app_state.ws_clients,
-        "horizon":        app_state.horizon,
+        "strategy":       app_state.strategy,
         "config_loaded_at": app_state.config_loaded_at,
         "db_ok":          db_ok,
     }

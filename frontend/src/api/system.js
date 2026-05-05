@@ -1,7 +1,7 @@
 import { api } from './client'
 
 export const getSystemStatus = () => api('/api/system/status')
-export const setHorizon      = (mode) => api(`/api/horizon/${mode}`, { method: 'POST' })
+export const setStrategy     = (name) => api(`/api/strategy/${name}`, { method: 'POST' })
 export const reloadConfig    = () => api('/api/config/reload', { method: 'POST' })
 export const getSignals      = (params = {}) => {
   const q = new URLSearchParams(
