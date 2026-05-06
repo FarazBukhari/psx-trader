@@ -64,9 +64,8 @@ ACTIONABLE = {"BUY", "SELL", "FORCE_SELL"}
 # Seconds in one PSX trading day (09:30–15:30 = 6 h = 21 600 s)
 TRADING_DAY_SECONDS = 6 * 3600
 
-# Outcome boundary constants
-_BREAKEVEN_BAND = 0.2   # ± % — if |pnl| ≤ this → BREAKEVEN
-_WEAK_WIN_MIN   = 0.2   # pnl must exceed this to be any kind of WIN
+# Outcome boundary constant — must fit String(8) column: WIN|LOSS|NEUTRAL
+_NEUTRAL_BAND = 0.2   # ± % — if |pnl| ≤ this → NEUTRAL
 
 
 # ---------------------------------------------------------------------------
@@ -114,22 +113,19 @@ def _pnl_pct(signal: str, entry: float, exit_p: float) -> float:
         return (entry - exit_p) / entry * 100
 
 
-def _classify_outcome(pnl: float, tp_pct: float = _TP_DEFAULT) -> str:
+def _classify_outcome(pnl: float) -> str:
     """
-    Four-bucket outcome classification (P8).
+    Three-bucket outcome classification matching the String(8) DB column.
 
-    STRONG_WIN  pnl ≥ tp_pct         (full take-profit achieved)
-    WEAK_WIN    _WEAK_WIN_MIN < pnl < tp_pct
-    BREAKEVEN   |pnl| ≤ _BREAKEVEN_BAND
-    LOSS        pnl < −_BREAKEVEN_BAND
+    WIN     pnl >  _NEUTRAL_BAND
+    LOSS    pnl < -_NEUTRAL_BAND
+    NEUTRAL |pnl| ≤ _NEUTRAL_BAND
     """
-    if pnl >= tp_pct:
-        return "STRONG_WIN"
-    if pnl > _WEAK_WIN_MIN:
-        return "WEAK_WIN"
-    if pnl >= -_BREAKEVEN_BAND:
-        return "BREAKEVEN"
-    return "LOSS"
+    if pnl > _NEUTRAL_BAND:
+        return "WIN"
+    if pnl < -_NEUTRAL_BAND:
+        return "LOSS"
+    return "NEUTRAL"
 
 
 def _compute_mfe_mae(
@@ -234,7 +230,7 @@ async def create_trade_on_signal(signal_dict: dict) -> None:
                     max_price_seen   = price,
                     min_price_seen   = price,
                     status           = "OPEN",
-                    outcome          = "BREAKEVEN",
+                    outcome          = "NEUTRAL",
                     mfe_pct          = 0.0,
                     mae_pct          = 0.0,
                     duration_minutes = 0.0,
@@ -307,7 +303,7 @@ async def create_trades_batch(signals: list[dict]) -> None:
                         max_price_seen   = price,
                         min_price_seen   = price,
                         status           = "OPEN",
-                        outcome          = "BREAKEVEN",
+                        outcome          = "NEUTRAL",
                         mfe_pct          = 0.0,
                         mae_pct          = 0.0,
                         duration_minutes = 0.0,
@@ -338,7 +334,7 @@ async def update_open_trades(stocks: list[dict], signals: list[dict] | None = No
       3. P2 — if current signal is OPPOSITE direction, close immediately.
       4. Check TP / SL / time-exit with dynamic thresholds.
       5. P5 — compute duration_minutes on close.
-      6. P8 — apply four-bucket outcome classification.
+      6. Apply three-bucket outcome classification (WIN / LOSS / NEUTRAL).
 
     No per-trade queries.  One SELECT for all OPEN trades, then minimal UPDATEs.
 
@@ -423,8 +419,7 @@ async def update_open_trades(stocks: list[dict], signals: list[dict] | None = No
                     trade.duration_minutes = round((now_ts - trade.entry_time) / 60, 2)
 
                     pnl = _pnl_pct(trade.signal, trade.entry_price, current)
-                    # P8 — four-bucket classification
-                    trade.outcome = _classify_outcome(pnl, tp_pct)
+                    trade.outcome = _classify_outcome(pnl)
                     trade.mfe_pct, trade.mae_pct = _compute_mfe_mae(
                         trade.signal,
                         trade.entry_price,
@@ -483,6 +478,7 @@ async def recover_open_trades() -> None:
                 trade.exit_time        = now_ts
                 trade.status           = "CLOSED"
                 # P8 — four-bucket; use default tp for recovery (no live price buffer)
+                # P8 — three-bucket; use default tp for recovery (no live price buffer)
                 trade.outcome          = _classify_outcome(pnl)
                 trade.mfe_pct          = mfe
                 trade.mae_pct          = mae
@@ -599,8 +595,7 @@ async def get_performance_summary() -> dict:
                 "total_open":            open_count,
             }
 
-        # P8 — wins = STRONG_WIN + WEAK_WIN; losses = LOSS; BREAKEVEN is neutral
-        wins   = [t for t in closed if t.outcome in ("STRONG_WIN", "WEAK_WIN")]
+        wins   = [t for t in closed if t.outcome == "WIN"]
         losses = [t for t in closed if t.outcome == "LOSS"]
 
         win_rate = round(len(wins) / total * 100, 2)

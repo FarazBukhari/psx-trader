@@ -215,12 +215,17 @@ class PredictionLog(Base):
     confidence            : Mapped[Optional[float]]= mapped_column(Float)       # capped at 0.85
     time_horizon_days     : Mapped[Optional[int]]  = mapped_column(Integer)
     target_price          : Mapped[Optional[float]]= mapped_column(Float)
-    outcome               : Mapped[str]            = mapped_column(String(16), default="pending")  # correct|incorrect|pending
+    outcome               : Mapped[str]            = mapped_column(String(16), default="pending")  # correct|incorrect|neutral|expired|pending
     outcome_price         : Mapped[Optional[float]]= mapped_column(Float)
     outcome_at            : Mapped[Optional[int]]  = mapped_column(Integer)
+    # ML training fields — added Phase 3
+    horizon_bucket        : Mapped[Optional[str]]  = mapped_column(String(8))    # short|medium|long (derived from time_horizon_days)
+    pct_change            : Mapped[Optional[float]]= mapped_column(Float)        # (outcome_price - price_at_prediction) / price_at_prediction * 100
+    evaluated_lag_sec     : Mapped[Optional[int]]  = mapped_column(Integer)      # outcome_at - predicted_at; validates horizon assumptions
 
     __table_args__ = (
-        Index("ix_pred_symbol_time", "symbol", "predicted_at"),
+        Index("ix_pred_symbol_time",   "symbol",  "predicted_at"),
+        Index("ix_pred_outcome_time",  "outcome", "predicted_at"),   # fast pending-row scans
     )
 
 

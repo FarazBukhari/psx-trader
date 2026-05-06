@@ -71,49 +71,18 @@ function Toast({ toast, onClose }) {
 
 // ── Main Header ───────────────────────────────────────────────────────────────
 export default function Header() {
-  const wsStatus           = useMarketStore((s) => s.wsStatus)
-  const connectionStatus   = useMarketStore((s) => s.connectionStatus)
-  const latency            = useMarketStore((s) => s.latency)
-  const dataStale          = useMarketStore((s) => s.dataStale)
-  const staleReason        = useMarketStore((s) => s.staleReason)
-  const isStale            = useMarketStore((s) => s.isStale)
-  const staleNote          = useMarketStore((s) => s.staleNote)
-  const lastUpdate         = useMarketStore((s) => s.lastUpdate)
-  const setSystemStatus    = useMarketStore((s) => s.setSystemStatus)
-  const setStaleFromStatus = useMarketStore((s) => s.setStaleFromStatus)
-  const systemStatus       = useMarketStore((s) => s.systemStatus)
+  const wsStatus        = useMarketStore((s) => s.wsStatus)
+  const connectionStatus = useMarketStore((s) => s.connectionStatus)
+  const latency         = useMarketStore((s) => s.latency)
+  const dataStale       = useMarketStore((s) => s.dataStale)
+  const staleReason     = useMarketStore((s) => s.staleReason)
+  const lastUpdate      = useMarketStore((s) => s.lastUpdate)
+  const setSystemStatus = useMarketStore((s) => s.setSystemStatus)
+  const systemStatus    = useMarketStore((s) => s.systemStatus)
 
   const toast      = useUIStore((s) => s.toast)
   const clearToast = useUIStore((s) => s.clearToast)
   const showToast  = useUIStore((s) => s.showToast)
-
-  // Debounced stale confirmation — waits 1.5s before showing the banner so a
-  // brief false→true→false flip during WS reconnect doesn't cause flicker.
-  // Clears immediately when isStale goes false (no delay needed on recovery).
-  const [confirmedStale, setConfirmedStale] = useState(false)
-  useEffect(() => {
-    if (!isStale) { setConfirmedStale(false); return }
-    const t = setTimeout(() => setConfirmedStale(true), 1500)
-    return () => clearTimeout(t)
-  }, [isStale])
-
-  // Track when stale began so we can show "stale since HH:MM".
-  // Uses functional update so multiple rapid isStale=true events don't reset the clock.
-  const [staleSince, setStaleSince] = useState(null)
-  useEffect(() => {
-    if (isStale) setStaleSince((prev) => prev ?? Date.now())
-    else         setStaleSince(null)
-  }, [isStale])
-  const staleSinceStr = staleSince
-    ? new Date(staleSince).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })
-    : null
-
-  // Stale banner dismissed state — resets each time confirmedStale goes true so
-  // the banner re-appears if the data goes stale again after being resolved.
-  const [bannerDismissed, setBannerDismissed] = useState(false)
-  useEffect(() => {
-    if (confirmedStale) setBannerDismissed(false)
-  }, [confirmedStale])
 
   // No-update staleness — fire only if no WS tick for 2× the poll interval (10s)
   const [wsStale, setWsStale] = useState(false)
@@ -124,16 +93,12 @@ export default function Header() {
     return () => clearTimeout(id)
   }, [lastUpdate])
 
-  // Poll system status every 60s — also syncs isStale/staleNote so the banner
-  // stays accurate even when the WS is recovering (no tick yet in this session).
+  // Poll system status every 60s
   const pollStatus = useCallback(() => {
     getSystemStatus()
-      .then((status) => {
-        setSystemStatus(status)
-        setStaleFromStatus(status)
-      })
+      .then(setSystemStatus)
       .catch(() => {})
-  }, [setSystemStatus, setStaleFromStatus])
+  }, [setSystemStatus])
 
   useEffect(() => {
     pollStatus()
@@ -200,24 +165,14 @@ export default function Header() {
         </div>
 
         {/* ── Stale data banner ── */}
-        {(confirmedStale || wsStale) && !bannerDismissed && (
-          <div className="bg-red-950 border-t border-red-800 px-5 py-2 flex items-center gap-2 text-xs text-red-300">
-            <span className="shrink-0">⚠</span>
-            <span className="flex-1">
-              {wsStale && !confirmedStale
-                ? 'No data received in 20s — connection may be stale.'
-                : staleNote || 'Market data is stale — prices may not reflect live market.'}
-              {staleSinceStr && (
-                <span className="ml-2 text-red-500 font-mono">Stale since {staleSinceStr}</span>
-              )}
+        {(dataStale || wsStale) && (
+          <div className="bg-yellow-900/40 border-t border-yellow-800 px-5 py-1.5 flex items-center gap-2 text-xs text-yellow-300">
+            <span>⚠</span>
+            <span>
+              {wsStale && !dataStale
+                ? 'No data received in 10s — connection may be stale.'
+                : `Stale data — prices from snapshot. ${staleReason || ''}`}
             </span>
-            <button
-              onClick={() => setBannerDismissed(true)}
-              className="shrink-0 opacity-60 hover:opacity-100 transition-opacity text-red-400 hover:text-red-200 ml-2"
-              aria-label="Dismiss stale data banner"
-            >
-              ✕
-            </button>
           </div>
         )}
       </header>

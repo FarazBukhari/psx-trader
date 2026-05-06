@@ -17,7 +17,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -150,5 +150,27 @@ async def init_db() -> None:
 
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Idempotent column migrations — safe to run on every startup.
+        # Each entry is (label, sql). Errors are suppressed — they mean the
+        # column/index already exists, which is the expected case after first run.
+        for label, ddl in _MIGRATIONS:
+            try:
+                await conn.execute(text(ddl))
+                logger.debug("migration OK: %s", label)
+            except Exception:
+                pass   # already exists — no action needed
 
     logger.info("Database initialised at %s", DATABASE_URL)
+
+
+# Column migrations for existing databases.
+# create_all only creates new tables — it won't add columns to existing ones.
+# Add new (label, sql) entries here whenever a column is added to a model.
+_MIGRATIONS: list[tuple[str, str]] = [
+    # Phase 3: ML training fields on prediction_log
+    ("prediction_log.horizon_bucket",    "ALTER TABLE prediction_log ADD COLUMN horizon_bucket TEXT"),
+    ("prediction_log.pct_change",        "ALTER TABLE prediction_log ADD COLUMN pct_change REAL"),
+    ("prediction_log.evaluated_lag_sec", "ALTER TABLE prediction_log ADD COLUMN evaluated_lag_sec INTEGER"),
+    # Indexes
+    ("ix_pred_outcome_time",             "CREATE INDEX IF NOT EXISTS ix_pred_outcome_time ON prediction_log (outcome, predicted_at)"),
+]
