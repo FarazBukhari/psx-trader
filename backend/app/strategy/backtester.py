@@ -42,6 +42,7 @@ from typing import Optional
 from ..db.database import get_session
 from ..db.models import PriceHistory
 from ..portfolio.fees import calculate_fee
+from .core import generate_signal
 from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
@@ -165,103 +166,11 @@ class WalkForwardResult:
 
 
 # ---------------------------------------------------------------------------
-# Indicator math (pure functions over price lists)
+# Signal generation — delegates to strategy/core.py (single source of truth)
 # ---------------------------------------------------------------------------
-
-def _sma(prices: list[float], n: int) -> Optional[float]:
-    if len(prices) < n:
-        return None
-    return sum(prices[-n:]) / n
-
-
-def _rsi(prices: list[float], period: int = 14) -> Optional[float]:
-    """Standard Wilder RSI over the last (period+1) prices."""
-    if len(prices) < period + 1:
-        return None
-    recent = prices[-(period + 1):]
-    deltas = [recent[i] - recent[i - 1] for i in range(1, len(recent))]
-    gains  = [d for d in deltas if d > 0]
-    losses = [-d for d in deltas if d < 0]
-    avg_gain = sum(gains) / period if gains else 0.0
-    avg_loss = sum(losses) / period if losses else 0.0
-    if avg_loss == 0:
-        return 100.0
-    rs = avg_gain / avg_loss
-    return round(100 - (100 / (1 + rs)), 2)
-
-
-def _prev_sma(prices: list[float], n: int) -> Optional[float]:
-    """SMA of the tick *before* the last one — used for crossover detection."""
-    if len(prices) < n + 1:
-        return None
-    return sum(prices[-(n + 1):-1]) / n
-
-
-# ---------------------------------------------------------------------------
-# Signal generation (stateless, applied per tick)
-# ---------------------------------------------------------------------------
-
-def _generate_signal(
-    prices:     list[float],
-    change_pct: Optional[float],
-    config:     StrategyConfig,
-    avg_cost:   float,              # current position cost (for stop-loss)
-) -> tuple[str, list[str]]:
-    """
-    Return (signal, sources) for the current tick.
-    Mirrors signal_engine.py rules but applied over a historical series.
-    """
-    if not prices:
-        return "HOLD", []
-
-    cur = prices[-1]
-    signals: list[str] = []
-    sources: list[str] = []
-
-    # 1. Stop-loss: current price has dropped stop_loss_pct % below avg entry
-    if avg_cost > 0 and cur <= avg_cost * (1 - config.stop_loss_pct / 100):
-        return "FORCE_SELL", ["stop_loss"]
-
-    # 2. RSI
-    rsi = _rsi(prices, config.rsi_period)
-    if rsi is not None:
-        if rsi <= config.rsi_oversold:
-            signals.append("BUY")
-            sources.append("rsi")
-        elif rsi >= config.rsi_overbought:
-            signals.append("SELL")
-            sources.append("rsi")
-
-    # 3. SMA crossover
-    sma_s_now  = _sma(prices, config.sma_short)
-    sma_l_now  = _sma(prices, config.sma_long)
-    sma_s_prev = _prev_sma(prices, config.sma_short)
-    sma_l_prev = _prev_sma(prices, config.sma_long)
-
-    if all(v is not None for v in [sma_s_now, sma_l_now, sma_s_prev, sma_l_prev]):
-        if sma_s_prev <= sma_l_prev and sma_s_now > sma_l_now:   # golden cross
-            signals.append("BUY")
-            sources.append("sma_crossover")
-        elif sma_s_prev >= sma_l_prev and sma_s_now < sma_l_now:  # death cross
-            signals.append("SELL")
-            sources.append("sma_crossover")
-
-    # 4. Change % momentum — PSX circuit-breaker clamp: max ±7.5% daily move
-    if change_pct is not None:
-        change_pct = max(-7.5, min(7.5, change_pct))
-        if change_pct <= -config.change_pct_threshold:
-            signals.append("SELL")
-            sources.append("change_pct")
-        elif change_pct >= config.change_pct_threshold:
-            signals.append("BUY")
-            sources.append("change_pct")
-
-    # Priority: FORCE_SELL > SELL > BUY > HOLD
-    _priority = ["FORCE_SELL", "SELL", "BUY", "HOLD"]
-    for p in _priority:
-        if p in signals:
-            return p, sources
-    return "HOLD", []
+# generate_signal() is imported from .core and called directly in _simulate().
+# The local _rsi / _sma / _prev_sma helpers and _generate_signal wrapper that
+# previously lived here have been removed; core.py is the canonical implementation.
 
 
 # ---------------------------------------------------------------------------
@@ -404,12 +313,21 @@ def _simulate(
 
         # ── Step 2: Generate signal for the NEXT tick ─────────────────────
         if len(prices) >= min_warmup:
-            pending_signal, pending_sources = _generate_signal(
-                prices,
-                change_pct,
-                config,
-                state.avg_cost if state.in_position else 0.0,
+            _result = generate_signal(
+                prices, [],
+                rsi_period=config.rsi_period,
+                rsi_oversold=config.rsi_oversold,
+                rsi_overbought=config.rsi_overbought,
+                sma_short=config.sma_short,
+                sma_long=config.sma_long,
+                change_pct=change_pct,
+                change_pct_threshold=config.change_pct_threshold,
+                clamp_change_pct=True,     # PSX ±7.5 % circuit-breaker
+                avg_cost=state.avg_cost if state.in_position else 0.0,
+                stop_loss_pct=config.stop_loss_pct,
             )
+            pending_signal  = _result["signal"]
+            pending_sources = _result["sources"]
         else:
             pending_signal, pending_sources = "HOLD", []
 

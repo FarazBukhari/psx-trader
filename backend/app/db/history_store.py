@@ -32,7 +32,7 @@ from .models import PriceHistory, SignalLog
 
 if TYPE_CHECKING:
     # Avoid circular import — signal_engine imports from here at runtime too
-    from ..strategy.signal_engine import PriceBuffer
+    from ..strategy.signal_engine import PriceBuffer, SignalEngine, VolumeSpikeStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +269,93 @@ class HistoryStore:
             "warm_price_buffer: loaded %d ticks across %d symbols from DB (2 queries)",
             total,
             len(by_symbol),
+        )
+
+    async def warm_prev_signals(self, engine: "SignalEngine") -> None:
+        """
+        Populate engine._prev_signals from the most recent signal per symbol
+        in signals_log.
+
+        Without this, every server restart resets _prev_signals to {}, so
+        signal_changed is False for ALL symbols on the first poll tick after
+        a restart — even for signals that were already active.  This causes
+        the signals_log to accumulate rows with signal_changed=False that
+        should have been True, silently corrupting the training dataset.
+        """
+        async with get_session() as session:
+            subq = (
+                select(
+                    SignalLog.symbol,
+                    func.max(SignalLog.generated_at).label("max_ts"),
+                )
+                .group_by(SignalLog.symbol)
+                .subquery()
+            )
+            stmt = (
+                select(SignalLog.symbol, SignalLog.signal)
+                .join(
+                    subq,
+                    (SignalLog.symbol == subq.c.symbol)
+                    & (SignalLog.generated_at == subq.c.max_ts),
+                )
+            )
+            rows = (await session.execute(stmt)).all()
+
+        if not rows:
+            logger.info("warm_prev_signals: no signals in DB yet — starting fresh")
+            return
+
+        for row in rows:
+            engine._prev_signals[row.symbol] = row.signal
+
+        logger.info(
+            "warm_prev_signals: restored %d symbol states into _prev_signals",
+            len(rows),
+        )
+
+    async def warm_volume_baselines(self, volume_strategy: "VolumeSpikeStrategy") -> None:
+        """
+        Pre-fill VolumeSpikeStrategy's per-symbol rolling volume buffer from
+        the most recent price_history rows, so the strategy has a real
+        baseline to compare against instead of the 1 M hardcoded fallback.
+
+        Uses last 20 non-null, non-zero volume readings per symbol within a
+        7-day lookback window.  Falls back silently if the table is empty.
+        """
+        symbols = await self.get_available_symbols()
+        if not symbols:
+            logger.info("warm_volume_baselines: no history in DB yet — skipping")
+            return
+
+        cutoff = int(time.time()) - (7 * 24 * 3600)
+
+        async with get_session() as session:
+            q = (
+                select(PriceHistory.symbol, PriceHistory.volume)
+                .where(PriceHistory.symbol.in_(symbols))
+                .where(PriceHistory.scraped_at >= cutoff)
+                .where(PriceHistory.volume.isnot(None))
+                .where(PriceHistory.volume > 0)
+                .order_by(PriceHistory.symbol, PriceHistory.scraped_at.desc())
+            )
+            result = await session.execute(q)
+            all_rows = result.all()
+
+        by_symbol: dict[str, list[int]] = {}
+        for row in all_rows:
+            lst = by_symbol.setdefault(row.symbol, [])
+            if len(lst) < 20:
+                lst.append(row.volume)
+
+        total = 0
+        for symbol, volumes in by_symbol.items():
+            for vol in reversed(volumes):   # oldest-first into rolling buffer
+                volume_strategy.push_volume(symbol, vol)
+            total += len(volumes)
+
+        logger.info(
+            "warm_volume_baselines: loaded %d volume readings across %d symbols",
+            total, len(by_symbol),
         )
 
 

@@ -18,7 +18,7 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Optional
 
-import numpy as np
+from .core import compute_rsi, compute_sma, compute_sma_prev, resolve_signals
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,42 @@ class PriceThresholdStrategy(BaseStrategy):
 # ---------------------------------------------------------------------------
 
 class VolumeSpikeStrategy(BaseStrategy):
+    """
+    Fires BUY when current volume exceeds the per-symbol 20-day rolling
+    average by more than `volume_spike_threshold` (default 2.5×).
+
+    The rolling average is maintained in-process:
+      - Warmed at startup from price_history via HistoryStore.warm_volume_baselines()
+      - Updated on every evaluate() call with the live volume reading
+
+    This replaces the previous 1 M hardcoded baseline, which was meaningless
+    for thin-volume PSX small-caps and wrong for high-volume large-caps.
+    """
+
     name = "volume_spike"
+    _WINDOW = 20   # rolling window size (20 trading days ≈ one calendar month)
+
+    def __init__(self) -> None:
+        self._buffers: dict[str, deque] = {}
+
+    # ── External warm-up interface (called once by HistoryStore) ──────────
+
+    def push_volume(self, symbol: str, volume: int) -> None:
+        """Append one volume reading to the rolling buffer for `symbol`."""
+        if not volume or volume <= 0:
+            return
+        if symbol not in self._buffers:
+            self._buffers[symbol] = deque(maxlen=self._WINDOW)
+        self._buffers[symbol].append(volume)
+
+    def avg_volume(self, symbol: str) -> float:
+        """Return the rolling average volume for `symbol`, or 0.0 if unknown."""
+        buf = self._buffers.get(symbol)
+        if not buf:
+            return 0.0
+        return sum(buf) / len(buf)
+
+    # ── Strategy interface ────────────────────────────────────────────────
 
     def evaluate(self, stock: dict, config: dict, signal_cfg: SignalConfig = None) -> Optional[str]:
         gcfg = config.get("global", {})
@@ -147,12 +182,21 @@ class VolumeSpikeStrategy(BaseStrategy):
             return None
 
         threshold = gcfg.get("volume_spike_threshold", 2.5)
-        volume = stock.get("volume", 0)
-        # Approximate average daily volume from history not available here;
-        # use 1M as a rough baseline for flagging
-        if volume > 1_000_000 * threshold:
-            # High volume alone → lean BUY (accumulation signal)
+        symbol    = stock["symbol"]
+        volume    = stock.get("volume") or 0
+
+        # Update rolling buffer with this tick's volume
+        self.push_volume(symbol, volume)
+
+        avg_vol = self.avg_volume(symbol)
+        if avg_vol <= 0:
+            # No baseline yet — abstain rather than use a meaningless number
+            return None
+
+        if volume > avg_vol * threshold:
+            # Volume spike confirms accumulation → lean BUY
             return "BUY"
+
         return None
 
 
@@ -187,7 +231,7 @@ class SMACrossoverStrategy(BaseStrategy):
     name = "sma_crossover"
 
     def evaluate(self, stock: dict, config: dict, signal_cfg: SignalConfig = None) -> Optional[str]:
-        sym = stock["symbol"]
+        sym   = stock["symbol"]
         cfg   = signal_cfg or SignalConfig()
         SHORT = cfg.sma_short
         LONG  = cfg.sma_long
@@ -195,22 +239,19 @@ class SMACrossoverStrategy(BaseStrategy):
         if price_buffer.len(sym) < LONG:
             return None  # Not enough data yet
 
-        prices = np.array(price_buffer.get(sym))
-        sma_short = float(np.mean(prices[-SHORT:]))
-        sma_long  = float(np.mean(prices[-LONG:]))
+        prices = price_buffer.get(sym)
 
-        # Prev tick crossover check
-        if price_buffer.len(sym) > LONG:
-            prev = prices[:-1]
-            prev_short = float(np.mean(prev[-SHORT:]))
-            prev_long  = float(np.mean(prev[-LONG:]))
-        else:
-            prev_short = sma_short
-            prev_long  = sma_long
+        sma_s_now  = compute_sma(prices, SHORT)
+        sma_l_now  = compute_sma(prices, LONG)
+        sma_s_prev = compute_sma_prev(prices, SHORT)
+        sma_l_prev = compute_sma_prev(prices, LONG)
 
-        if prev_short <= prev_long and sma_short > sma_long:
+        if any(v is None for v in (sma_s_now, sma_l_now, sma_s_prev, sma_l_prev)):
+            return None
+
+        if sma_s_prev <= sma_l_prev and sma_s_now > sma_l_now:
             return "BUY"   # Golden cross
-        if prev_short >= prev_long and sma_short < sma_long:
+        if sma_s_prev >= sma_l_prev and sma_s_now < sma_l_now:
             return "SELL"  # Death cross
         return None
 
@@ -229,21 +270,12 @@ class RSIStrategy(BaseStrategy):
         if price_buffer.len(sym) < cfg.rsi_period + 1:
             return None
 
-        prices = np.array(price_buffer.get(sym, cfg.rsi_period + 1))
-        deltas = np.diff(prices)
-        gains  = np.where(deltas > 0, deltas, 0)
-        losses = np.where(deltas < 0, -deltas, 0)
+        prices = price_buffer.get(sym, cfg.rsi_period + 1)
+        rsi    = compute_rsi(prices, cfg.rsi_period)
+        if rsi is None:
+            return None
 
-        avg_gain = np.mean(gains[-cfg.rsi_period:])
-        avg_loss = np.mean(losses[-cfg.rsi_period:])
-
-        if avg_loss == 0:
-            rsi = 100.0
-        else:
-            rs  = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs))
-
-        stock["_rsi"] = round(rsi, 1)  # attach for API response
+        stock["_rsi"] = rsi  # attach for API response
 
         if rsi <= cfg.rsi_oversold:
             return "BUY"
@@ -256,26 +288,17 @@ class RSIStrategy(BaseStrategy):
 # Strategy registry
 # ---------------------------------------------------------------------------
 
+_volume_spike_strategy = VolumeSpikeStrategy()
+
 STRATEGY_REGISTRY: list[BaseStrategy] = [
     PriceThresholdStrategy(),
-    VolumeSpikeStrategy(),
+    _volume_spike_strategy,
     ChangePctStrategy(),
     SMACrossoverStrategy(),
     RSIStrategy(),
 ]
 
-# Signal priority: lower index wins in a tie
-_PRIORITY = ["FORCE_SELL", "SELL", "BUY", "HOLD"]
-
-
-def _resolve(signals: list[str]) -> str:
-    """Merge multiple strategy opinions → highest-priority signal wins."""
-    if not signals:
-        return "HOLD"
-    for s in _PRIORITY:
-        if s in signals:
-            return s
-    return "HOLD"
+# resolve_signals imported from core — single source of truth for priority merge
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +480,7 @@ class SignalEngine:
                 except Exception as exc:
                     logger.warning("Strategy %s error on %s: %s", strategy.name, sym, exc)
 
-            signal = _resolve(opinions)
+            signal = resolve_signals(opinions)
 
             # Detect signal change
             prev = self._prev_signals.get(sym)
@@ -484,6 +507,5 @@ class SignalEngine:
     @staticmethod
     def _sma(symbol: str, n: int) -> Optional[float]:
         prices = price_buffer.get(symbol, n)
-        if len(prices) < n:
-            return None
-        return round(float(np.mean(prices)), 2)
+        val    = compute_sma(prices, n)
+        return round(val, 2) if val is not None else None

@@ -10,6 +10,7 @@ Table index:
   - PortfolioSnapshot   : periodic snapshots for P&L charting over time
   - PredictionLog       : prediction outcomes tracked for accuracy feedback
   - SignalOutcome        : validated signal outcomes across short/medium/long horizons
+  - DataQualityLog      : anomalies detected in raw scraper output (price jumps, volume spikes, missing symbols)
 """
 
 from __future__ import annotations
@@ -305,3 +306,29 @@ class ForwardTrade(Base):
 
     def __repr__(self) -> str:
         return f"<ForwardTrade {self.signal} {self.symbol} @ {self.entry_price} [{self.status}]>"
+
+
+# ---------------------------------------------------------------------------
+# DataQualityLog  (anomaly log — append-only, written by data quality monitor)
+# ---------------------------------------------------------------------------
+
+class DataQualityLog(Base):
+    __tablename__ = "data_quality_log"
+
+    id         : Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol     : Mapped[Optional[str]]  = mapped_column(String(16), index=True)   # NULL for missing_symbol (no data at all)
+    timestamp  : Mapped[int]            = mapped_column(Integer, nullable=False, index=True)  # Unix ts of the offending tick
+    issue_type : Mapped[str]            = mapped_column(String(32), nullable=False)           # price_jump | volume_anomaly | missing_symbol
+    severity   : Mapped[str]            = mapped_column(String(8),  nullable=False)           # low | medium | high
+    details    : Mapped[Optional[str]]  = mapped_column(Text)                                 # JSON — issue-specific context
+    created_at : Mapped[int]            = mapped_column(Integer, nullable=False, default=lambda: int(time.time()))
+
+    __table_args__ = (
+        Index("ix_dql_timestamp",  "timestamp"),
+        Index("ix_dql_created_at", "created_at"),
+        Index("ix_dql_issue_type", "issue_type"),
+        Index("ix_dql_severity",   "severity"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<DataQualityLog {self.issue_type}/{self.severity} {self.symbol} @ {self.timestamp}>"

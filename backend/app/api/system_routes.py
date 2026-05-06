@@ -35,6 +35,7 @@ import httpx  # already a project dependency (used by PSXScraper)
 
 from fastapi import APIRouter, BackgroundTasks, Query
 
+from ..analytics.data_quality import get_data_quality_summary
 from ..market_hours import market_status, MarketState
 from ..state import app_state
 
@@ -203,6 +204,7 @@ async def trigger_historical_fetch(
 @system_router.get("/status")
 async def get_system_status():
     mkt   = market_status()
+    dq    = await get_data_quality_summary()
     now   = _time.time()
     sigs  = list(app_state.signals.values())
 
@@ -303,11 +305,12 @@ async def get_system_status():
     }
 
     return {
-        "market":  market_block,
-        "data":    data_block,
-        "signals": signals_block,
-        "trading": trading_block,
-        "system":  system_block,
+        "market":       market_block,
+        "data":         data_block,
+        "signals":      signals_block,
+        "trading":      trading_block,
+        "system":       system_block,
+        "data_quality": dq,
     }
 
 

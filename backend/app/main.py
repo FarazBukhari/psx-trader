@@ -24,6 +24,8 @@ from .api.backtest_routes import backtest_router
 from .api.analytics_routes import analytics_router
 from .api.performance_routes import performance_router
 from .analytics.signal_evaluator import evaluate_pending_signals
+from .analytics.prediction_resolver import resolve_pending_predictions
+from .analytics.data_quality import detect_data_issues, flush_data_quality
 from .analytics.forward_tracker import (
     create_trades_batch,
     recover_open_trades,
@@ -34,7 +36,7 @@ from .logger import setup_logging
 from .scraper.psx_scraper import PSXScraper
 from .state import app_state
 from .strategy.backtester import get_preset, preset_to_horizon
-from .strategy.signal_engine import price_buffer
+from .strategy.signal_engine import price_buffer, _volume_spike_strategy
 from .websocket.manager import manager
 
 # ---------------------------------------------------------------------------
@@ -117,11 +119,33 @@ async def _signal_evaluation_loop():
         await asyncio.sleep(EVALUATOR_INTERVAL)
 
 
+async def _prediction_resolution_loop():
+    """Periodically resolve pending prediction_log outcomes (closes the ML feedback loop)."""
+    logger.info("Prediction resolution loop started — interval: %ds", EVALUATOR_INTERVAL)
+    # Offset 300s from signal evaluator (which starts at 60s) to avoid simultaneous DB pressure
+    await asyncio.sleep(300)
+    while True:
+        try:
+            resolved = await resolve_pending_predictions()
+            if resolved:
+                logger.info("Prediction resolver: %d outcomes resolved", resolved)
+        except Exception as exc:
+            logger.warning("Prediction resolution failed (non-fatal): %s", exc)
+        await asyncio.sleep(EVALUATOR_INTERVAL)
+
+
 async def _poll_loop(scraper: PSXScraper):
     logger.info("Poll loop started — interval: %ds", POLL_INTERVAL)
     while True:
         try:
             stocks  = await scraper.fetch()
+
+            # Data quality: detect before signal generation, expected = prev tick symbols
+            _dq_expected = set(app_state.stocks.keys())
+            _dq_issues   = detect_data_issues(stocks, expected=_dq_expected)
+            if _dq_issues:
+                asyncio.create_task(flush_data_quality(_dq_issues))
+
             _horizon = preset_to_horizon(app_state.strategy)
             signals = app_state.engine.process(
                 stocks,
@@ -218,7 +242,22 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Price buffer warm-up failed (non-fatal): %s", exc)
 
-    # ── Step 3b: forward-test recovery — force-close stale OPEN trades ──
+    # ── Step 3a: restore _prev_signals so signal_changed is correct ──────
+    # Without this, every restart resets _prev_signals to {} and all symbols
+    # show signal_changed=False on the first tick — corrupting the training data.
+    try:
+        await app_state.history_store.warm_prev_signals(app_state.engine)
+    except Exception as exc:
+        logger.warning("Prev signals warm-up failed (non-fatal): %s", exc)
+
+    # ── Step 3b: warm VolumeSpikeStrategy with per-symbol rolling avg ────
+    # Replaces the hardcoded 1 M baseline with real historical volume data.
+    try:
+        await app_state.history_store.warm_volume_baselines(_volume_spike_strategy)
+    except Exception as exc:
+        logger.warning("Volume baseline warm-up failed (non-fatal): %s", exc)
+
+    # ── Step 3d: forward-test recovery — force-close stale OPEN trades ──
     try:
         await recover_open_trades()
     except Exception as exc:
@@ -250,10 +289,11 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Live warm-up failed: %s", exc)
 
-    poll_task      = asyncio.create_task(_poll_loop(scraper))
-    watch_task     = asyncio.create_task(_watch_strategy())
-    snapshot_task  = asyncio.create_task(_portfolio_snapshot_loop())
-    evaluator_task = asyncio.create_task(_signal_evaluation_loop())
+    poll_task       = asyncio.create_task(_poll_loop(scraper))
+    watch_task      = asyncio.create_task(_watch_strategy())
+    snapshot_task   = asyncio.create_task(_portfolio_snapshot_loop())
+    evaluator_task  = asyncio.create_task(_signal_evaluation_loop())
+    resolver_task   = asyncio.create_task(_prediction_resolution_loop())
 
     yield
 
@@ -269,6 +309,7 @@ async def lifespan(app: FastAPI):
     watch_task.cancel()
     snapshot_task.cancel()
     evaluator_task.cancel()
+    resolver_task.cancel()
     await scraper.close()
     logger.info("Server shutdown — goodbye")
 
