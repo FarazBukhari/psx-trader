@@ -40,24 +40,13 @@ from ..db.models import PredictionLog, PriceHistory
 
 logger = logging.getLogger("psx.prediction_resolver")
 
-_SEARCH_WINDOW_S  = 24 * 3600   # search up to 24 h forward for a matching tick
-_NEUTRAL_BAND     = 0.2          # ±% — classify as neutral if price barely moved
-_EXPIRE_MULTIPLIER = 3           # mark "expired" after 3× the horizon has passed
+_SEARCH_WINDOW_S = 24 * 3600   # search up to 24 h forward for a matching tick
+_NEUTRAL_BAND    = 0.2          # ±% — classify as neutral if price barely moved
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Outcome classifier
 # ---------------------------------------------------------------------------
-
-def _horizon_bucket(days: int) -> str:
-    """Classify time_horizon_days into a training bucket."""
-    if days <= 1:
-        return "short"
-    elif days <= 3:
-        return "medium"
-    else:
-        return "long"
-
 
 def _classify(
     direction: str,
@@ -66,16 +55,10 @@ def _classify(
 ) -> Optional[str]:
     """
     Return 'correct', 'incorrect', 'neutral', or None (no data yet).
-
-    None is returned when:
-      - price_future is missing (data not yet available — row stays pending)
-      - price_now is missing or ≤ 0 (corrupt/zero entry — skip row safely)
-      - direction is not 'up' or 'down' (unknown — caller should already filter)
-
-    direction must already be normalised to lowercase before calling.
+    None means the price hasn't arrived — row stays pending.
     """
     if price_future is None or price_now is None or price_now <= 0:
-        return None   # guard: division-by-zero / missing data
+        return None
 
     change_pct = (price_future - price_now) / price_now * 100.0
 
@@ -87,25 +70,19 @@ def _classify(
     if direction == "down":
         return "correct" if change_pct < 0 else "incorrect"
 
-    return None  # unknown direction — should not reach here after caller normalises
+    return None  # unknown direction
 
 
 # ---------------------------------------------------------------------------
 # Main resolution function
 # ---------------------------------------------------------------------------
 
-async def resolve_pending_predictions(batch_size: int = 500) -> int:
+async def resolve_pending_predictions(batch_size: int = 200) -> int:
     """
     Resolve pending prediction_log rows whose time horizon has elapsed.
 
-    Returns count of rows updated (outcome set to correct/incorrect/neutral/expired).
+    Returns count of rows updated (outcome set to correct/incorrect/neutral).
     Rows whose forward price is not yet available remain 'pending'.
-
-    Outcomes:
-      correct   — direction was right (beyond neutral band)
-      incorrect — direction was wrong
-      neutral   — price moved ≤ 0.2% either way
-      expired   — still pending after 3× the horizon; price data will never arrive
     """
     now_ts = int(time.time())
 
@@ -124,40 +101,23 @@ async def resolve_pending_predictions(batch_size: int = 500) -> int:
         all_rows = list((await session.execute(stmt)).scalars().all())
 
         if not all_rows:
-            logger.debug("prediction_resolver: no pending predictions")
+            logger.debug("prediction_resolver: no pending predictions found")
             return 0
 
-        # Separate expired rows (3× horizon elapsed, price data will never arrive)
-        # from eligible rows (1× horizon elapsed but within the expiry window).
-        expired_rows: list[PredictionLog] = []
-        eligible: list[PredictionLog]     = []
-        pending_not_yet: int              = 0
-
-        for r in all_rows:
-            horizon_s  = r.time_horizon_days * 86_400
-            target_ts  = r.predicted_at + horizon_s
-            expire_ts  = r.predicted_at + horizon_s * _EXPIRE_MULTIPLIER
-
-            if now_ts > expire_ts:
-                expired_rows.append(r)
-            elif now_ts >= target_ts:
-                eligible.append(r)
-            else:
-                pending_not_yet += 1
-
-        logger.info(
-            "prediction_resolver: %d eligible, %d expired, %d not-yet-due (of %d pending)",
-            len(eligible), len(expired_rows), pending_not_yet, len(all_rows),
-        )
-
-        # ── Mark expired rows ──────────────────────────────────────────────
-        for r in expired_rows:
-            r.outcome         = "expired"
-            r.outcome_at      = now_ts
-            r.horizon_bucket  = _horizon_bucket(r.time_horizon_days)
+        # Filter: only those whose horizon has actually elapsed
+        eligible = [
+            r for r in all_rows
+            if (r.predicted_at + r.time_horizon_days * 86_400) <= now_ts
+        ]
 
         if not eligible:
-            return len(expired_rows)
+            logger.debug("prediction_resolver: no horizons elapsed yet")
+            return 0
+
+        logger.info(
+            "prediction_resolver: %d eligible rows (of %d pending)",
+            len(eligible), len(all_rows),
+        )
 
         # ── Step 2: batch-fetch forward prices (one query per symbol) ──────
         # Same bisect pattern as signal_evaluator for O(N) instead of O(N×T).
@@ -197,46 +157,19 @@ async def resolve_pending_predictions(batch_size: int = 500) -> int:
                 else:
                     price_map[pred_id] = (None, None)
 
-        # ── Step 3: classify and update resolved rows ──────────────────────
-        # Note: "expired" rows must be excluded from accuracy metrics in analytics
-        # (they represent data availability failures, not prediction quality).
-        # Track expiry rate per symbol / horizon as a data quality signal instead.
-        resolved        = 0
-        skipped_no_price = 0
-        skipped_invalid  = 0   # zero/null entry price or unknown direction
-
+        # ── Step 3: update resolved rows ───────────────────────────────────
+        updated = 0
         for r in eligible:
-            # Normalize direction once at read time — guards against upstream casing changes
-            direction = (r.predicted_direction or "").lower().strip()
-            if direction not in {"up", "down"}:
-                skipped_invalid += 1
-                continue
-
-            # Guard: zero or null entry price → corrupt row, skip safely
-            if not r.price_at_prediction or r.price_at_prediction <= 0:
-                skipped_invalid += 1
-                continue
-
-            outcome_price, outcome_scraped_at = price_map.get(r.id, (None, None))
-            outcome = _classify(direction, r.price_at_prediction, outcome_price)
+            outcome_price, outcome_at = price_map.get(r.id, (None, None))
+            outcome = _classify(r.predicted_direction, r.price_at_prediction, outcome_price)
 
             if outcome is None:
-                skipped_no_price += 1
                 continue  # Forward price not yet available — leave pending
 
-            pct_change = (outcome_price - r.price_at_prediction) / r.price_at_prediction * 100.0
+            r.outcome       = outcome
+            r.outcome_price = outcome_price
+            r.outcome_at    = outcome_at
+            updated += 1
 
-            r.outcome             = outcome
-            r.outcome_price       = outcome_price
-            r.outcome_at          = outcome_scraped_at
-            r.pct_change          = pct_change
-            r.horizon_bucket      = _horizon_bucket(r.time_horizon_days)
-            r.evaluated_lag_sec   = (outcome_scraped_at - r.predicted_at) if outcome_scraped_at else None
-            resolved += 1
-
-        total = resolved + len(expired_rows)
-        logger.info(
-            "prediction_resolver: resolved=%d expired=%d skipped_no_price=%d skipped_invalid=%d",
-            resolved, len(expired_rows), skipped_no_price, skipped_invalid,
-        )
-        return total
+        logger.info("prediction_resolver: resolved %d prediction outcomes", updated)
+        return updated

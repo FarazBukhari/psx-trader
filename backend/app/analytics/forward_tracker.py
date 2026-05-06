@@ -64,8 +64,9 @@ ACTIONABLE = {"BUY", "SELL", "FORCE_SELL"}
 # Seconds in one PSX trading day (09:30–15:30 = 6 h = 21 600 s)
 TRADING_DAY_SECONDS = 6 * 3600
 
-# Outcome boundary constant — must fit String(8) column: WIN|LOSS|NEUTRAL
-_NEUTRAL_BAND = 0.2   # ± % — if |pnl| ≤ this → NEUTRAL
+# Outcome boundary constants — String(16) column: STRONG_WIN|WEAK_WIN|BREAKEVEN|LOSS
+_BREAKEVEN_BAND = 0.2   # ± % — |pnl| ≤ this → BREAKEVEN
+_WEAK_WIN_MIN   = 0.2   # pnl must exceed this to count as any kind of WIN
 
 
 # ---------------------------------------------------------------------------
@@ -113,19 +114,22 @@ def _pnl_pct(signal: str, entry: float, exit_p: float) -> float:
         return (entry - exit_p) / entry * 100
 
 
-def _classify_outcome(pnl: float) -> str:
+def _classify_outcome(pnl: float, tp_pct: float = _TP_DEFAULT) -> str:
     """
-    Three-bucket outcome classification matching the String(8) DB column.
+    Four-bucket outcome classification — String(16) column.
 
-    WIN     pnl >  _NEUTRAL_BAND
-    LOSS    pnl < -_NEUTRAL_BAND
-    NEUTRAL |pnl| ≤ _NEUTRAL_BAND
+    STRONG_WIN  pnl ≥ tp_pct                    (full take-profit achieved)
+    WEAK_WIN    _WEAK_WIN_MIN < pnl < tp_pct     (positive but partial)
+    BREAKEVEN   |pnl| ≤ _BREAKEVEN_BAND          (noise — neither win nor loss)
+    LOSS        pnl < -_BREAKEVEN_BAND
     """
-    if pnl > _NEUTRAL_BAND:
-        return "WIN"
-    if pnl < -_NEUTRAL_BAND:
-        return "LOSS"
-    return "NEUTRAL"
+    if pnl >= tp_pct:
+        return "STRONG_WIN"
+    if pnl > _WEAK_WIN_MIN:
+        return "WEAK_WIN"
+    if pnl >= -_BREAKEVEN_BAND:
+        return "BREAKEVEN"
+    return "LOSS"
 
 
 def _compute_mfe_mae(
@@ -230,7 +234,7 @@ async def create_trade_on_signal(signal_dict: dict) -> None:
                     max_price_seen   = price,
                     min_price_seen   = price,
                     status           = "OPEN",
-                    outcome          = "NEUTRAL",
+                    outcome          = "BREAKEVEN",
                     mfe_pct          = 0.0,
                     mae_pct          = 0.0,
                     duration_minutes = 0.0,
@@ -303,7 +307,7 @@ async def create_trades_batch(signals: list[dict]) -> None:
                         max_price_seen   = price,
                         min_price_seen   = price,
                         status           = "OPEN",
-                        outcome          = "NEUTRAL",
+                        outcome          = "BREAKEVEN",
                         mfe_pct          = 0.0,
                         mae_pct          = 0.0,
                         duration_minutes = 0.0,
@@ -334,7 +338,7 @@ async def update_open_trades(stocks: list[dict], signals: list[dict] | None = No
       3. P2 — if current signal is OPPOSITE direction, close immediately.
       4. Check TP / SL / time-exit with dynamic thresholds.
       5. P5 — compute duration_minutes on close.
-      6. Apply three-bucket outcome classification (WIN / LOSS / NEUTRAL).
+      6. Apply four-bucket outcome classification (STRONG_WIN / WEAK_WIN / BREAKEVEN / LOSS).
 
     No per-trade queries.  One SELECT for all OPEN trades, then minimal UPDATEs.
 
@@ -419,7 +423,7 @@ async def update_open_trades(stocks: list[dict], signals: list[dict] | None = No
                     trade.duration_minutes = round((now_ts - trade.entry_time) / 60, 2)
 
                     pnl = _pnl_pct(trade.signal, trade.entry_price, current)
-                    trade.outcome = _classify_outcome(pnl)
+                    trade.outcome = _classify_outcome(pnl, tp_pct)
                     trade.mfe_pct, trade.mae_pct = _compute_mfe_mae(
                         trade.signal,
                         trade.entry_price,
@@ -595,7 +599,7 @@ async def get_performance_summary() -> dict:
                 "total_open":            open_count,
             }
 
-        wins   = [t for t in closed if t.outcome == "WIN"]
+        wins   = [t for t in closed if t.outcome in ("STRONG_WIN", "WEAK_WIN")]
         losses = [t for t in closed if t.outcome == "LOSS"]
 
         win_rate = round(len(wins) / total * 100, 2)

@@ -278,7 +278,6 @@ async def execute_buy(payload: BuyRequest) -> TradeResult:
     Validates:
     - Market is OPEN and data is live (HTTP 423 otherwise)
     - Rate limit not exceeded (HTTP 429 otherwise)
-    - Submitted price within 2% of live market price (HTTP 422 otherwise)
     - Sufficient cash including fees (HTTP 422 otherwise)
 
     On success:
@@ -286,27 +285,6 @@ async def execute_buy(payload: BuyRequest) -> TradeResult:
     - Creates or updates position (weighted average cost basis)
     - Returns the trade record + updated portfolio summary
     """
-    sym = payload.symbol.strip().upper()
-    market_price = _current_prices().get(sym)
-    if market_price is not None:
-        deviation = abs(payload.price - market_price) / market_price
-        if deviation > 0.02:
-            logger.warning(
-                "Price deviation rejected: symbol=%s deviation=%.2f%% user_price=%.2f market_price=%.2f",
-                sym, deviation * 100, payload.price, market_price,
-            )
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "code":    "PRICE_DEVIATION",
-                    "message": (
-                        f"Submitted price PKR {payload.price:.2f} deviates "
-                        f"{deviation * 100:.1f}% from market price "
-                        f"PKR {market_price:.2f} (max 2%)."
-                    ),
-                },
-            )
-
     try:
         trade     = await _pm.execute_buy(
             symbol=payload.symbol,
@@ -348,33 +326,11 @@ async def execute_sell(payload: SellRequest) -> TradeResult:
     Validates:
     - Market is OPEN and data is live (HTTP 423 otherwise)
     - Rate limit not exceeded (HTTP 429 otherwise)
-    - Submitted price within 2% of live market price (HTTP 422 otherwise)
     - Position exists with sufficient shares (HTTP 422 / 404 otherwise)
 
     Realized P&L = net proceeds − cost basis (pre-CGT).
     On success adds net proceeds to cash and reduces / closes the position.
     """
-    sym = payload.symbol.strip().upper()
-    market_price = _current_prices().get(sym)
-    if market_price is not None:
-        deviation = abs(payload.price - market_price) / market_price
-        if deviation > 0.02:
-            logger.warning(
-                "Price deviation rejected: symbol=%s deviation=%.2f%% user_price=%.2f market_price=%.2f",
-                sym, deviation * 100, payload.price, market_price,
-            )
-            raise HTTPException(
-                status_code=422,
-                detail={
-                    "code":    "PRICE_DEVIATION",
-                    "message": (
-                        f"Submitted price PKR {payload.price:.2f} deviates "
-                        f"{deviation * 100:.1f}% from market price "
-                        f"PKR {market_price:.2f} (max 2%)."
-                    ),
-                },
-            )
-
     try:
         trade     = await _pm.execute_sell(
             symbol=payload.symbol,

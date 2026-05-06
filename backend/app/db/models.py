@@ -295,8 +295,8 @@ class ForwardTrade(Base):
     exit_time       : Mapped[Optional[int]]  = mapped_column(Integer)
 
     # Status / outcome
-    status          : Mapped[str]            = mapped_column(String(8),  nullable=False, default="OPEN")   # OPEN|CLOSED
-    outcome         : Mapped[str]            = mapped_column(String(8),  nullable=False, default="NEUTRAL") # WIN|LOSS|NEUTRAL
+    status          : Mapped[str]            = mapped_column(String(8),  nullable=False, default="OPEN")      # OPEN|CLOSED
+    outcome         : Mapped[str]            = mapped_column(String(16), nullable=False, default="BREAKEVEN") # STRONG_WIN|WEAK_WIN|BREAKEVEN|LOSS
 
     # Metrics — finalised on close; 0.0 while OPEN
     mfe_pct         : Mapped[float]          = mapped_column(Float, nullable=False, default=0.0)  # max favourable excursion
