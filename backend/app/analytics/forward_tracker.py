@@ -34,6 +34,7 @@ MFE/MAE  (computed from max_price_seen / min_price_seen at close)
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from typing import Optional
@@ -64,9 +65,9 @@ ACTIONABLE = {"BUY", "SELL", "FORCE_SELL"}
 # Seconds in one PSX trading day (09:30–15:30 = 6 h = 21 600 s)
 TRADING_DAY_SECONDS = 6 * 3600
 
-# Outcome boundary constants
-_BREAKEVEN_BAND = 0.2   # ± % — if |pnl| ≤ this → BREAKEVEN
-_WEAK_WIN_MIN   = 0.2   # pnl must exceed this to be any kind of WIN
+# Outcome boundary constants — String(16) column: STRONG_WIN|WEAK_WIN|BREAKEVEN|LOSS
+_BREAKEVEN_BAND = 0.2   # ± % — |pnl| ≤ this → BREAKEVEN
+_WEAK_WIN_MIN   = 0.2   # pnl must exceed this to count as any kind of WIN
 
 
 # ---------------------------------------------------------------------------
@@ -116,12 +117,12 @@ def _pnl_pct(signal: str, entry: float, exit_p: float) -> float:
 
 def _classify_outcome(pnl: float, tp_pct: float = _TP_DEFAULT) -> str:
     """
-    Four-bucket outcome classification (P8).
+    Four-bucket outcome classification — String(16) column.
 
-    STRONG_WIN  pnl ≥ tp_pct         (full take-profit achieved)
-    WEAK_WIN    _WEAK_WIN_MIN < pnl < tp_pct
-    BREAKEVEN   |pnl| ≤ _BREAKEVEN_BAND
-    LOSS        pnl < −_BREAKEVEN_BAND
+    STRONG_WIN  pnl ≥ tp_pct                    (full take-profit achieved)
+    WEAK_WIN    _WEAK_WIN_MIN < pnl < tp_pct     (positive but partial)
+    BREAKEVEN   |pnl| ≤ _BREAKEVEN_BAND          (noise — neither win nor loss)
+    LOSS        pnl < -_BREAKEVEN_BAND
     """
     if pnl >= tp_pct:
         return "STRONG_WIN"
@@ -202,8 +203,10 @@ async def create_trade_on_signal(signal_dict: dict) -> None:
         logger.debug("forward_tracker: stale data for %s — skipping", symbol)
         return
 
-    price      = signal_dict.get("current") or signal_dict.get("price")
-    entry_time = signal_dict.get("generated_at") or int(time.time())
+    price          = signal_dict.get("current") or signal_dict.get("price")
+    entry_time     = signal_dict.get("generated_at") or int(time.time())
+    raw_sources    = signal_dict.get("signal_sources")
+    sources_json   = json.dumps(raw_sources) if isinstance(raw_sources, list) else raw_sources
 
     if not price:
         logger.warning("forward_tracker: no price for %s %s — skipping", sig, symbol)
@@ -238,6 +241,7 @@ async def create_trade_on_signal(signal_dict: dict) -> None:
                     mfe_pct          = 0.0,
                     mae_pct          = 0.0,
                     duration_minutes = 0.0,
+                    signal_sources   = sources_json,
                 )
                 .on_conflict_do_nothing(index_elements=["symbol", "entry_time"])
             )
@@ -281,10 +285,12 @@ async def create_trades_batch(signals: list[dict]) -> None:
     try:
         async with get_session() as session:
             for s in actionable:
-                symbol     = s["symbol"]
-                sig        = s["signal"].upper()
-                price      = float(s["current"])
-                entry_time = s.get("generated_at") or now_ts
+                symbol       = s["symbol"]
+                sig          = s["signal"].upper()
+                price        = float(s["current"])
+                entry_time   = s.get("generated_at") or now_ts
+                raw_src      = s.get("signal_sources")
+                sources_json = json.dumps(raw_src) if isinstance(raw_src, list) else raw_src
 
                 # P1 — only one OPEN trade per symbol at a time
                 existing = await session.execute(
@@ -311,6 +317,7 @@ async def create_trades_batch(signals: list[dict]) -> None:
                         mfe_pct          = 0.0,
                         mae_pct          = 0.0,
                         duration_minutes = 0.0,
+                        signal_sources   = sources_json,
                     )
                     .on_conflict_do_nothing(index_elements=["symbol", "entry_time"])
                 )
@@ -338,7 +345,7 @@ async def update_open_trades(stocks: list[dict], signals: list[dict] | None = No
       3. P2 — if current signal is OPPOSITE direction, close immediately.
       4. Check TP / SL / time-exit with dynamic thresholds.
       5. P5 — compute duration_minutes on close.
-      6. P8 — apply four-bucket outcome classification.
+      6. Apply four-bucket outcome classification (STRONG_WIN / WEAK_WIN / BREAKEVEN / LOSS).
 
     No per-trade queries.  One SELECT for all OPEN trades, then minimal UPDATEs.
 
@@ -423,7 +430,6 @@ async def update_open_trades(stocks: list[dict], signals: list[dict] | None = No
                     trade.duration_minutes = round((now_ts - trade.entry_time) / 60, 2)
 
                     pnl = _pnl_pct(trade.signal, trade.entry_price, current)
-                    # P8 — four-bucket classification
                     trade.outcome = _classify_outcome(pnl, tp_pct)
                     trade.mfe_pct, trade.mae_pct = _compute_mfe_mae(
                         trade.signal,
@@ -483,6 +489,7 @@ async def recover_open_trades() -> None:
                 trade.exit_time        = now_ts
                 trade.status           = "CLOSED"
                 # P8 — four-bucket; use default tp for recovery (no live price buffer)
+                # P8 — three-bucket; use default tp for recovery (no live price buffer)
                 trade.outcome          = _classify_outcome(pnl)
                 trade.mfe_pct          = mfe
                 trade.mae_pct          = mae
@@ -599,7 +606,6 @@ async def get_performance_summary() -> dict:
                 "total_open":            open_count,
             }
 
-        # P8 — wins = STRONG_WIN + WEAK_WIN; losses = LOSS; BREAKEVEN is neutral
         wins   = [t for t in closed if t.outcome in ("STRONG_WIN", "WEAK_WIN")]
         losses = [t for t in closed if t.outcome == "LOSS"]
 
@@ -657,6 +663,14 @@ async def get_performance_summary() -> dict:
 # ---------------------------------------------------------------------------
 
 def _to_dict(t: ForwardTrade) -> dict:
+    # Deserialise signal_sources JSON → list; older rows have NULL → []
+    sources: list[str] = []
+    if t.signal_sources:
+        try:
+            sources = json.loads(t.signal_sources)
+        except (json.JSONDecodeError, TypeError):
+            pass
+
     return {
         "id":               t.id,
         "symbol":           t.symbol,
@@ -672,4 +686,5 @@ def _to_dict(t: ForwardTrade) -> dict:
         "mfe_pct":          t.mfe_pct,
         "mae_pct":          t.mae_pct,
         "duration_minutes": t.duration_minutes,
+        "signal_sources":   sources,
     }

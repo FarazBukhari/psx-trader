@@ -17,7 +17,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -150,5 +150,100 @@ async def init_db() -> None:
 
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Idempotent column migrations — safe to run on every startup.
+        # Each entry is (label, sql). Errors are suppressed — they mean the
+        # column/index already exists, which is the expected case after first run.
+        for label, ddl in _MIGRATIONS:
+            try:
+                await conn.execute(text(ddl))
+                logger.debug("migration OK: %s", label)
+            except Exception:
+                pass   # already exists — no action needed
+
+    # Multi-step table migrations run separately (can't use the try/except loop
+    # for dependent DDL steps — partial failure would leave the schema broken).
+    await _migrate_forward_trades_outcome()
 
     logger.info("Database initialised at %s", DATABASE_URL)
+
+
+async def _migrate_forward_trades_outcome() -> None:
+    """
+    Widen forward_trades.outcome from VARCHAR(8) → VARCHAR(16) to accommodate
+    four-bucket outcomes: STRONG_WIN | WEAK_WIN | BREAKEVEN | LOSS.
+
+    SQLite has no ALTER COLUMN, so we use the rename/recreate pattern.
+    The migration is idempotent: guarded by checking whether forward_trades_old
+    already exists (already migrated) and whether forward_trades exists at all
+    (fresh DB — create_all already used the new schema).
+
+    NOTE: SQLite ignores VARCHAR(N) length constraints at the storage level, so
+    no existing data is ever truncated.  This migration is cosmetically correct
+    and keeps the declared column type accurate for tooling / future Postgres use.
+    """
+    async with async_engine.begin() as conn:
+        # Check if migration is needed
+        tables = (await conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='forward_trades'")
+        )).fetchall()
+        if not tables:
+            return   # fresh DB — create_all already used String(16), nothing to do
+
+        # Check if already migrated (outcome column already declared TEXT/VARCHAR(16))
+        # We detect this by looking for forward_trades_old (left from a previous run)
+        # or by checking the column declaration via PRAGMA.
+        pragma = (await conn.execute(text("PRAGMA table_info(forward_trades)"))).fetchall()
+        col_types = {row[1]: row[2] for row in pragma}   # name → type
+        outcome_type = col_types.get("outcome", "")
+
+        # Already widened (TEXT has no N, VARCHAR(16) is what we want)
+        if outcome_type in ("TEXT", "VARCHAR(16)"):
+            logger.debug("_migrate_forward_trades_outcome: already migrated (%s) — skipping", outcome_type)
+            return
+
+        logger.info("_migrate_forward_trades_outcome: widening outcome column %s → VARCHAR(16)", outcome_type)
+        try:
+            await conn.execute(text("ALTER TABLE forward_trades RENAME TO forward_trades_old"))
+            await conn.execute(text("""
+                CREATE TABLE forward_trades (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    symbol           TEXT    NOT NULL,
+                    signal           TEXT    NOT NULL,
+                    entry_price      REAL    NOT NULL,
+                    entry_time       INTEGER NOT NULL,
+                    max_price_seen   REAL    NOT NULL,
+                    min_price_seen   REAL    NOT NULL,
+                    exit_price       REAL,
+                    exit_time        INTEGER,
+                    status           TEXT    NOT NULL DEFAULT 'OPEN',
+                    outcome          TEXT    NOT NULL DEFAULT 'BREAKEVEN',
+                    mfe_pct          REAL    NOT NULL DEFAULT 0.0,
+                    mae_pct          REAL    NOT NULL DEFAULT 0.0,
+                    duration_minutes REAL    NOT NULL DEFAULT 0.0,
+                    UNIQUE (symbol, entry_time)
+                )
+            """))
+            await conn.execute(text("INSERT INTO forward_trades SELECT * FROM forward_trades_old"))
+            await conn.execute(text("DROP TABLE forward_trades_old"))
+            # Recreate indexes dropped by the rename
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ft_symbol_status ON forward_trades (symbol, status)"))
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_ft_entry_time    ON forward_trades (entry_time)"))
+            logger.info("_migrate_forward_trades_outcome: migration complete")
+        except Exception as exc:
+            logger.error("_migrate_forward_trades_outcome: failed — %s", exc)
+            raise   # propagate — broken schema is worse than startup failure
+
+
+# Column migrations for existing databases.
+# create_all only creates new tables — it won't add columns to existing ones.
+# Add new (label, sql) entries here whenever a column is added to a model.
+_MIGRATIONS: list[tuple[str, str]] = [
+    # Phase 3: ML training fields on prediction_log
+    ("prediction_log.horizon_bucket",    "ALTER TABLE prediction_log ADD COLUMN horizon_bucket TEXT"),
+    ("prediction_log.pct_change",        "ALTER TABLE prediction_log ADD COLUMN pct_change REAL"),
+    ("prediction_log.evaluated_lag_sec", "ALTER TABLE prediction_log ADD COLUMN evaluated_lag_sec INTEGER"),
+    # Indexes
+    ("ix_pred_outcome_time",             "CREATE INDEX IF NOT EXISTS ix_pred_outcome_time ON prediction_log (outcome, predicted_at)"),
+    # Phase 7: signal provenance on forward_trades
+    ("forward_trades.signal_sources",    "ALTER TABLE forward_trades ADD COLUMN signal_sources TEXT"),
+]

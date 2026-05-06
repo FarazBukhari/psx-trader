@@ -121,14 +121,39 @@ function computeInsights(history) {
       .map(([tier, s]) => ({ tier, wr: (s.wins / s.total * 100).toFixed(0), n: s.total }))
   }
 
+  // 5. Indicator breakdown — accuracy and win/loss contribution per source
+  // signal_sources is [] for pre-migration rows; those rows are simply skipped.
+  const byIndicator = {}  // indicator → { wins, losses, total }
+  for (const t of history) {
+    const sources = Array.isArray(t.signal_sources) ? t.signal_sources : []
+    for (const ind of sources) {
+      if (!byIndicator[ind]) byIndicator[ind] = { wins: 0, losses: 0, total: 0 }
+      byIndicator[ind].total++
+      if (isWin(t.outcome))        byIndicator[ind].wins++
+      else if (t.outcome === 'LOSS') byIndicator[ind].losses++
+    }
+  }
+  // Sort by total appearances desc; require ≥ 2 trades per indicator
+  const indicatorRows = Object.entries(byIndicator)
+    .filter(([, s]) => s.total >= 2)
+    .map(([ind, s]) => ({
+      ind,
+      total:  s.total,
+      wins:   s.wins,
+      losses: s.losses,
+      wr:     (s.wins / s.total * 100),
+    }))
+    .sort((a, b) => b.total - a.total)
+
   return {
     bestSig,
     worstDD,
     avgWinDur,
     avgLossDur,
-    winCount:  winDurs.length,
-    lossCount: lossDurs.length,
+    winCount:      winDurs.length,
+    lossCount:     lossDurs.length,
     confRows,
+    indicatorRows: indicatorRows.length > 0 ? indicatorRows : null,
     n: history.length,
   }
 }
@@ -269,6 +294,54 @@ function ConfidenceInsight({ confRows }) {
   )
 }
 
+/**
+ * IndicatorBreakdown — accuracy + win/loss contribution per signal_sources entry.
+ * Shows a mini bar for each indicator: win% bar + lose count context.
+ */
+function IndicatorBreakdown({ indicatorRows }) {
+  if (!indicatorRows) {
+    return (
+      <span className="text-xs text-gray-700 italic">
+        No source data yet — appears once trades close.
+      </span>
+    )
+  }
+
+  // For bar widths, normalise to the highest total count
+  const maxTotal = Math.max(...indicatorRows.map((r) => r.total))
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {indicatorRows.map(({ ind, total, wins, losses, wr }) => {
+        const wrRounded = Math.round(wr)
+        const barColor  = wr >= 50 ? 'bg-green-500' : wr >= 35 ? 'bg-yellow-500' : 'bg-red-500'
+        const wrColor   = wr >= 50 ? 'text-green-400' : wr >= 35 ? 'text-yellow-400' : 'text-red-400'
+        const barWidth  = Math.round((total / maxTotal) * 100)
+
+        return (
+          <div key={ind} className="flex flex-col gap-0.5">
+            {/* Label row */}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono text-gray-400 truncate max-w-[110px]">{ind}</span>
+              <div className="flex items-center gap-1.5 text-[10px] font-mono shrink-0">
+                <span className={clsx('font-bold', wrColor)}>{wrRounded}%</span>
+                <span className="text-gray-700">
+                  {wins}W/{losses}L
+                </span>
+                <span className="text-gray-700">({total})</span>
+              </div>
+            </div>
+            {/* Win-rate bar */}
+            <div className="h-1 rounded-full bg-gray-800 overflow-hidden" style={{ width: `${barWidth}%` }}>
+              <div className={clsx('h-full rounded-full', barColor)} style={{ width: `${wrRounded}%` }} />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ── main component ────────────────────────────────────────────────────────────
 
 export default function PerformancePanel() {
@@ -393,6 +466,11 @@ export default function PerformancePanel() {
           <ConfidenceInsight confRows={insights?.confRows ?? null} />
         </InsightCard>
       </div>
+
+      {/* ── Indicator Breakdown ── */}
+      <InsightCard label="Indicator Breakdown — accuracy &amp; contribution per source">
+        <IndicatorBreakdown indicatorRows={insights?.indicatorRows ?? null} />
+      </InsightCard>
 
       {/* Sample-size caveat */}
       {insights && (
