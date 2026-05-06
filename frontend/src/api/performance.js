@@ -19,7 +19,7 @@ export const getLiveTrades = () =>
  * @param {number} offset - row offset (default 0)
  * @param {string|null} symbol - optional symbol filter
  */
-export const getTradeHistory = (limit = 50, offset = 0, symbol = null) => {
+export const getTradeHistory = (limit = 25, offset = 0, symbol = null) => {
   const params = new URLSearchParams({ limit, offset })
   if (symbol) params.set('symbol', symbol)
   return api(`/api/performance/history?${params}`)

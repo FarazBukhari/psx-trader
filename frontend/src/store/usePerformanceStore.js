@@ -48,7 +48,7 @@ export const usePerformanceStore = create((set, get) => ({
     }
   },
 
-  fetchHistory: async (limit = 50, offset = 0, symbol = null) => {
+  fetchHistory: async (limit = 25, offset = 0, symbol = null) => {
     try {
       const data = await getTradeHistory(limit, offset, symbol)
       set({ history: data.trades ?? [], historyTotal: data.total ?? 0 })
