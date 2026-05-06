@@ -5,7 +5,7 @@
  *          duration (live, computed from entry_time), status dot.
  */
 
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import clsx from 'clsx'
 import Badge from '../common/Badge'
 import { usePerformanceStore } from '../../store/usePerformanceStore'
@@ -24,17 +24,9 @@ function fmtPct(v, showSign = true) {
   return `${sign}${n.toFixed(2)}%`
 }
 
-/**
- * Live elapsed duration from entry_time (Unix s) to now.
- * Ticks every 60 s so duration stays accurate without needing a store refresh.
- */
+/** Live elapsed duration from entry_time (Unix s) to now. */
 function useLiveDuration(entryTimeUnix) {
-  const [now, setNow] = useState(() => Date.now())
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 60_000)
-    return () => clearInterval(id)
-  }, [])
-  const mins = Math.floor((now / 1000 - entryTimeUnix) / 60)
+  const mins = Math.floor((Date.now() / 1000 - entryTimeUnix) / 60)
   if (mins < 60) return `${mins}m`
   const h = Math.floor(mins / 60)
   const m = mins % 60
