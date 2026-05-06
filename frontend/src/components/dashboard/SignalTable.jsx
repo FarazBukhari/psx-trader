@@ -382,6 +382,7 @@ function SignalSection({
 // ── Main component ────────────────────────────────────────────────────────────
 export default function SignalTable() {
   const signals        = useMarketStore((s) => s.signals)
+  const isStale        = useMarketStore((s) => s.isStale)
   const expandedSym    = useUIStore((s) => s.expandedSymbol)
   const setExpanded    = useUIStore((s) => s.setExpandedSymbol)
   const setTradeIntent = useUIStore((s) => s.setTradeIntent)
@@ -501,9 +502,16 @@ export default function SignalTable() {
   }
 
   return (
-    <div className="space-y-3">
+    <div className={clsx('space-y-3 transition-opacity duration-300', isStale && 'opacity-60')}>
       {/* ── Controls ── */}
       <div className="flex flex-wrap items-center gap-2">
+        {isStale && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold
+                           bg-red-950 border border-red-800 text-red-400 shrink-0">
+            ⚠ STALE DATA
+            <InfoTip text="Market data is stale — signals may be outdated. Live prices have not been received from PSX recently." />
+          </span>
+        )}
         <input
           type="text"
           placeholder="Search symbol or sector…"

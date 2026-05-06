@@ -35,6 +35,12 @@ export const useMarketStore = create((set) => ({
   dataStale: false,
   staleReason: null,
 
+  // Stale-data surface state (updated from WS tick AND system status poll)
+  // isStale  — true when backend confirms prices are from a snapshot
+  // staleNote — human-readable explanation (from backend stale_note / stale_reason)
+  isStale: false,
+  staleNote: null,
+
   // System status (polled separately)
   systemStatus: null,
 
@@ -62,7 +68,17 @@ export const useMarketStore = create((set) => ({
       configLoadedAt: data.config_at  || null,
       dataStale:      data.stale      || false,
       staleReason:    data.stale_reason || null,
+      // Keep isStale/staleNote in sync with every WS tick
+      isStale:        data.stale      || false,
+      staleNote:      data.stale_reason || null,
     }),
+
+  // Called after each /api/system/status poll — ensures stale state stays
+  // accurate even when the WS connection is lagging or recovering.
+  setStaleFromStatus: (status) => set({
+    isStale:   status?.signals?.stale       || false,
+    staleNote: status?.signals?.stale_note  || null,
+  }),
 
   setStrategy:     (strategy)      => set({ strategy }),
   setSystemStatus: (systemStatus)  => set({ systemStatus }),
