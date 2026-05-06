@@ -2,10 +2,9 @@
 Forward-Testing Performance API.
 
 Endpoints:
-  GET /api/performance/live       → all currently OPEN forward trades
-  GET /api/performance/history    → CLOSED trades, paginated (newest-first)
-  GET /api/performance/summary    → aggregate stats: win_rate, expectancy, MFE/MAE
-  GET /api/performance/benchmark  → KSE-100 proxy price ticks, normalised to base 100
+  GET /api/performance/live     → all currently OPEN forward trades
+  GET /api/performance/history  → CLOSED trades, paginated (newest-first)
+  GET /api/performance/summary  → aggregate stats: win_rate, expectancy, MFE/MAE
 """
 
 from __future__ import annotations
@@ -13,15 +12,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Query
 from typing import Optional
 
-from sqlalchemy import select as sa_select
-
 from ..analytics.forward_tracker import (
     get_closed_trades,
     get_open_trades,
     get_performance_summary,
 )
-from ..db.database import get_session
-from ..db.models import PriceHistory
 
 performance_router = APIRouter(prefix="/api/performance", tags=["performance"])
 
@@ -87,59 +82,3 @@ async def performance_summary():
       }
     """
     return await get_performance_summary()
-
-
-@performance_router.get("/benchmark")
-async def benchmark_prices(
-    since: int           = Query(..., description="Start Unix timestamp (first trade exit_time)"),
-    until: Optional[int] = Query(None, description="End Unix timestamp (last trade exit_time)"),
-    proxy: str           = Query("OGDC", description="PSX ticker to use as KSE-100 proxy"),
-    n:     int           = Query(200, ge=2, le=2000, description="Max ticks to return"),
-):
-    """
-    Return price history for a proxy symbol normalised to base 100 at `since`.
-
-    Used by the Performance Chart to draw a KSE-100 comparison line alongside
-    the portfolio equity curve.  Ticks are evenly sampled up to `n` rows so
-    the frontend always receives a fixed-size dataset regardless of tick density.
-
-    Response shape:
-      {
-        "proxy":  "OGDC",
-        "points": [{"time": 1714500000, "value": 100.0}, ...]
-      }
-
-    Returns an empty `points` list if no price data exists for the proxy in range.
-    """
-    sym = proxy.strip().upper()
-
-    try:
-        async with get_session() as session:
-            q = (
-                sa_select(PriceHistory.scraped_at, PriceHistory.close)
-                .where(
-                    PriceHistory.symbol == sym,
-                    PriceHistory.scraped_at >= since,
-                    PriceHistory.close.isnot(None),
-                )
-            )
-            if until:
-                q = q.where(PriceHistory.scraped_at <= until)
-
-            q = q.order_by(PriceHistory.scraped_at.asc()).limit(n)
-            rows = (await session.execute(q)).all()
-    except Exception as exc:
-        return {"proxy": sym, "points": [], "error": str(exc)}
-
-    if not rows:
-        return {"proxy": sym, "points": []}
-
-    base_close = rows[0].close
-    if not base_close:
-        return {"proxy": sym, "points": []}
-
-    points = [
-        {"time": r.scraped_at, "value": round(r.close / base_close * 100, 4)}
-        for r in rows
-    ]
-    return {"proxy": sym, "points": points}
