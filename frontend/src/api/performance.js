@@ -19,7 +19,7 @@ export const getLiveTrades = () =>
  * @param {number} offset - row offset (default 0)
  * @param {string|null} symbol - optional symbol filter
  */
-export const getTradeHistory = (limit = 50, offset = 0, symbol = null) => {
+export const getTradeHistory = (limit = 25, offset = 0, symbol = null) => {
   const params = new URLSearchParams({ limit, offset })
   if (symbol) params.set('symbol', symbol)
   return api(`/api/performance/history?${params}`)
@@ -28,3 +28,15 @@ export const getTradeHistory = (limit = 50, offset = 0, symbol = null) => {
 /** Aggregate performance summary: win_rate, expectancy, MFE/MAE, etc. */
 export const getPerformanceSummary = () =>
   api('/api/performance/summary')
+
+/**
+ * KSE-100 proxy price ticks normalised to base 100 at `since`.
+ * @param {number} since  - start Unix timestamp (first trade exit_time)
+ * @param {number|null} until - end Unix timestamp (last trade exit_time)
+ * @param {string} proxy  - PSX ticker used as index proxy (default "OGDC")
+ */
+export const getBenchmark = (since, until = null, proxy = 'OGDC') => {
+  const params = new URLSearchParams({ since, proxy, n: 200 })
+  if (until) params.set('until', until)
+  return api(`/api/performance/benchmark?${params}`)
+}
