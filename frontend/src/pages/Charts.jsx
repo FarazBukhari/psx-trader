@@ -33,9 +33,17 @@ function fmtAxis(v) {
   return v.toFixed(0)
 }
 
-function fmtTimestamp(ts, tfId) {
+/**
+ * Smart formatter: if the data spans less than 24 hours (all intraday),
+ * always show HH:MM regardless of the selected timeframe.
+ * Only show dates when the data actually spans multiple days.
+ */
+function fmtTimestamp(ts, tfId, spanSeconds) {
   const d = new Date(ts * 1000)
-  if (tfId === '1D') return d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })
+  const isIntraday = spanSeconds != null && spanSeconds < 24 * 3600
+  if (tfId === '1D' || isIntraday) {
+    return d.toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })
+  }
   if (tfId === '1W') return d.toLocaleDateString('en-PK', { weekday: 'short', day: 'numeric' })
   return d.toLocaleDateString('en-PK', { day: 'numeric', month: 'short' })
 }
@@ -169,12 +177,12 @@ function RecentStrip({ recent, selected, onSelect }) {
 
 // ── Custom chart tooltip ──────────────────────────────────────────────────────
 
-function ChartTooltip({ active, payload, label, tfId }) {
+function ChartTooltip({ active, payload, label, tfId, spanSecs }) {
   if (!active || !payload?.length) return null
   const d = payload[0].payload
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs shadow-xl">
-      <div className="text-gray-400 mb-1">{fmtTimestamp(label, tfId)}</div>
+      <div className="text-gray-400 mb-1">{fmtTimestamp(label, tfId, spanSecs)}</div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
         {d.open  != null && <><span className="text-gray-500">Open</span>  <span className="text-right font-mono">{d.open.toFixed(2)}</span></>}
         {d.high  != null && <><span className="text-gray-500">High</span>  <span className="text-right font-mono text-green-400">{d.high.toFixed(2)}</span></>}
@@ -200,14 +208,15 @@ function Stat({ label, value, color }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function Charts() {
-  const [symbols,   setSymbols]   = useState([])
-  const [statsMap,  setStatsMap]  = useState({})
-  const [selected,  setSelected]  = useState(null)
-  const [recent,    setRecent]    = useState([])   // recently viewed symbols
-  const [tf,        setTf]        = useState('1D')
-  const [chartData, setChartData] = useState([])
-  const [loading,   setLoading]   = useState(false)
-  const [error,     setError]     = useState(null)
+  const [symbols,    setSymbols]    = useState([])
+  const [statsMap,   setStatsMap]   = useState({})
+  const [selected,   setSelected]   = useState(null)
+  const [recent,     setRecent]     = useState([])   // recently viewed symbols
+  const [tf,         setTf]         = useState('1D')
+  const [chartData,  setChartData]  = useState([])
+  const [loading,    setLoading]    = useState(false)
+  const [error,      setError]      = useState(null)
+  const [reloadKey,  setReloadKey]  = useState(0)   // bump to force re-fetch same sym+tf
 
   // Load symbol list
   useEffect(() => {
@@ -251,7 +260,7 @@ export default function Charts() {
 
   useEffect(() => {
     if (selected) loadChart(selected, tf)
-  }, [selected, tf, loadChart])
+  }, [selected, tf, loadChart, reloadKey])
 
   // Chart-level stats
   const closes = chartData.map((d) => d.close).filter(Boolean)
@@ -267,6 +276,13 @@ export default function Charts() {
     ? Math.round(chartData.reduce((s, d) => s + (d.volume || 0), 0) / chartData.length)
     : null
   const stats = statsMap[selected] || {}
+
+  // Detect actual data span so the X-axis can format correctly
+  const tsArr    = chartData.map((d) => d.scraped_at).filter(Boolean)
+  const spanSecs = tsArr.length >= 2 ? tsArr[tsArr.length - 1] - tsArr[0] : null
+  const isIntradayData = spanSecs != null && spanSecs < 24 * 3600
+  // Show a notice for multi-day timeframes when DB only has intraday data
+  const limitedDataNotice = tf !== '1D' && isIntradayData && chartData.length > 0
 
   return (
     <div className="p-5 space-y-5 max-w-6xl mx-auto">
@@ -300,6 +316,17 @@ export default function Charts() {
               </button>
             ))}
           </div>
+
+          {/* Reload — re-fetches current symbol+tf from DB (useful after fetch_historical) */}
+          <button
+            onClick={() => setReloadKey((k) => k + 1)}
+            disabled={loading}
+            title="Reload chart data from DB"
+            className="px-2.5 py-1.5 rounded-xl border border-gray-700 bg-gray-900 text-gray-500
+                       hover:text-gray-300 hover:border-gray-600 transition text-xs disabled:opacity-40"
+          >
+            {loading ? '…' : '↺'}
+          </button>
         </div>
       </div>
 
@@ -362,7 +389,7 @@ export default function Charts() {
               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" vertical={false} />
               <XAxis
                 dataKey="scraped_at"
-                tickFormatter={(v) => fmtTimestamp(v, tf)}
+                tickFormatter={(v) => fmtTimestamp(v, tf, spanSecs)}
                 tick={{ fill: '#6b7280', fontSize: 10 }}
                 axisLine={false}
                 tickLine={false}
@@ -380,7 +407,7 @@ export default function Charts() {
               {first != null && (
                 <ReferenceLine y={first} stroke="#374151" strokeDasharray="4 3" />
               )}
-              <Tooltip content={<ChartTooltip tfId={tf} />} isAnimationActive={false} />
+              <Tooltip content={<ChartTooltip tfId={tf} spanSecs={spanSecs} />} isAnimationActive={false} />
               <Area
                 type="monotone"
                 dataKey="close"
@@ -394,6 +421,16 @@ export default function Charts() {
           </ResponsiveContainer>
         )}
       </div>
+
+      {limitedDataNotice && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-yellow-950/40 border border-yellow-800/40 rounded-lg text-[11px] text-yellow-600">
+          <span>⚠</span>
+          <span>
+            Only today's data is available for <strong>{tf}</strong> view — showing intraday ticks with time labels.
+            Run <code className="bg-gray-800 px-1 rounded">python -m scripts.fetch_historical</code> to populate historical data.
+          </span>
+        </div>
+      )}
 
       <p className="text-[11px] text-gray-700">
         Live ticks every 15s during market hours. For 1W / 1M / 1Y run{' '}

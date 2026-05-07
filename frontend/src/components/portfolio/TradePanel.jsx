@@ -31,7 +31,7 @@ function ConfirmModal({ side, symbol, shares, price, estCost, feeEst, onConfirm,
             ['Symbol',    symbol],
             ['Shares',    shares],
             ['Price',     `PKR ${Number(price).toLocaleString('en-PK', { minimumFractionDigits: 2 })}`],
-            ['Fee (est)', `PKR ${feeEst ? feeEst.toFixed(2) : (estCost * 0.005).toFixed(2)}`],
+            ['Fee (est)', `PKR ${feeEst ? feeEst.toFixed(2) : (sharesNum * priceNum * 0.0025).toFixed(2)}`],
             [isBuy ? 'Total Cost' : 'Net Proceeds',
               `PKR ${estCost.toLocaleString('en-PK', { minimumFractionDigits: 2 })}`],
           ].map(([label, val]) => (
@@ -86,6 +86,7 @@ export default function TradePanel() {
   const showToast      = useUIStore((s) => s.showToast)
   const signals        = useMarketStore((s) => s.signals)
   const systemStatus   = useMarketStore((s) => s.systemStatus)
+  const isStale        = useMarketStore((s) => s.isStale)
 
   const [symbol, setSymbol]   = useState('')
   const [shares, setShares]   = useState('')
@@ -142,13 +143,24 @@ export default function TradePanel() {
     }
   }, [symbol, fetchBP])
 
-  // Estimated cost (client-side: shares × price × 1.005 rough fee)
+  // Estimated cost — Finqalab charges 0.25% brokerage only (confirmed cashbook)
+  const BROKER_FEE = 0.0025
   const sharesNum = parseFloat(shares) || 0
   const priceNum  = parseFloat(price)  || 0
-  const estCost   = sharesNum * priceNum * (side === 'buy' ? 1.005 : 0.995)
+  const estCost   = sharesNum * priceNum * (side === 'buy' ? 1 + BROKER_FEE : 1 - BROKER_FEE)
 
   const cash = portfolio?.cash_available ?? 0
   const cashOk = side === 'sell' || estCost <= cash
+
+  // Price deviation — compare against live signal price (same `current` field as WS store)
+  // warn at >1.5%, block at >2% so the UI degradation is gradual
+  const liveSig      = signals.find((s) => s.symbol === symbol.trim().toUpperCase())
+  const livePrice    = liveSig?.current ?? null
+  const priceDevPct  = (livePrice && priceNum > 0)
+    ? Math.abs(priceNum - livePrice) / livePrice
+    : 0
+  const priceWarns    = !isStale && priceDevPct > 0.015  // yellow inline warning
+  const priceDeviates = !isStale && priceDevPct > 0.02   // hard block
 
   // Step 1: validate → open confirmation modal
   const handleSubmit = (e) => {
@@ -230,6 +242,14 @@ export default function TradePanel() {
         </div>
       )}
 
+      {/* Stale data warning — disables trade submission */}
+      {isStale && (
+        <div className="mb-4 px-3 py-2 bg-red-950 border border-red-800 rounded text-xs text-red-300">
+          ⚠ Market data is stale. Prices shown may not reflect the live market.
+          <div className="mt-1 text-red-500">Trade execution is disabled until live data resumes.</div>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-3">
         {/* Buy / Sell toggle */}
         <div className="flex gap-1 bg-gray-800 rounded-lg p-0.5 w-fit">
@@ -291,7 +311,11 @@ export default function TradePanel() {
         {/* Price */}
         <Field label="Price (PKR)">
           <input
-            className={INPUT}
+            className={clsx(
+              INPUT,
+              priceDeviates && 'border-red-500 bg-red-950/20 focus:border-red-400',
+              priceWarns && !priceDeviates && 'border-yellow-600 focus:border-yellow-500',
+            )}
             type="number"
             min="0.01"
             step="0.01"
@@ -300,6 +324,18 @@ export default function TradePanel() {
             onChange={(e) => setPrice(e.target.value)}
             required
           />
+          {priceDeviates && (
+            <div className="mt-1 px-2 py-1 bg-red-900/40 border border-red-800 rounded text-xs text-red-300">
+              ✕ Price is {(priceDevPct * 100).toFixed(1)}% from market price
+              (PKR {livePrice.toFixed(2)}) — server will reject. Adjust to within 2%.
+            </div>
+          )}
+          {priceWarns && !priceDeviates && (
+            <div className="mt-1 px-2 py-1 bg-yellow-900/40 border border-yellow-800 rounded text-xs text-yellow-300">
+              ⚠ Price is {(priceDevPct * 100).toFixed(1)}% from market price
+              (PKR {livePrice.toFixed(2)}). Server rejects above 2%.
+            </div>
+          )}
         </Field>
 
         {/* Notes */}
@@ -356,17 +392,24 @@ export default function TradePanel() {
         {/* Submit */}
         <button
           type="submit"
-          disabled={loading || !cashOk}
+          disabled={loading || !cashOk || isStale || priceDeviates}
+          title={
+            isStale         ? 'Disabled: market data is stale'
+            : priceDeviates ? `Price is ${(priceDevPct * 100).toFixed(1)}% from market — adjust to within 2%`
+            : undefined
+          }
           className={clsx(
             'w-full py-2.5 rounded-lg text-sm font-bold transition',
             loading ? 'opacity-50 cursor-not-allowed'
               : side === 'buy'
               ? 'bg-green-700 hover:bg-green-600 text-white'
               : 'bg-orange-600 hover:bg-orange-500 text-white',
-            !cashOk && !loading && 'opacity-50 cursor-not-allowed',
+            (!cashOk || isStale || priceDeviates) && !loading && 'opacity-50 cursor-not-allowed',
           )}
         >
-          {loading ? <span className="flex items-center justify-center gap-2"><Loader size="sm" /> Processing…</span>
+          {loading         ? <span className="flex items-center justify-center gap-2"><Loader size="sm" /> Processing…</span>
+            : isStale      ? '⚠ Data Stale — Trading Disabled'
+            : priceDeviates ? `✕ Price Off by ${(priceDevPct * 100).toFixed(1)}% — Adjust Price`
             : `${side.toUpperCase()} ${sharesNum > 0 ? sharesNum : ''} ${symbol || '—'}`}
         </button>
       </form>

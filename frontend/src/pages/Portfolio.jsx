@@ -2,8 +2,9 @@
  * Portfolio page — summary bar, positions table, trade panel.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { usePortfolioStore } from '../store/usePortfolioStore'
+import { useMarketStore }    from '../store/useMarketStore'
 import PortfolioBar    from '../components/portfolio/PortfolioBar'
 import PortfolioChart  from '../components/portfolio/PortfolioChart'
 import PositionsTable  from '../components/portfolio/PositionsTable'
@@ -12,10 +13,12 @@ import { PageLoader }  from '../components/common/Loader'
 import { api }         from '../api/client'
 
 export default function Portfolio() {
-  const fetch     = usePortfolioStore((s) => s.fetch)
-  const portfolio = usePortfolioStore((s) => s.portfolio)
-  const loading   = usePortfolioStore((s) => s.loading)
-  const error     = usePortfolioStore((s) => s.error)
+  const fetch           = usePortfolioStore((s) => s.fetch)
+  const portfolio       = usePortfolioStore((s) => s.portfolio)
+  const updateLiveValue = usePortfolioStore((s) => s.updateLiveValue)
+  const loading         = usePortfolioStore((s) => s.loading)
+  const error           = usePortfolioStore((s) => s.error)
+  const signals         = useMarketStore((s) => s.signals)
   const [resetting, setResetting] = useState(false)
   const [resetMsg,  setResetMsg]  = useState(null)
 
@@ -40,6 +43,17 @@ export default function Portfolio() {
     const id = setInterval(fetch, 30_000)
     return () => clearInterval(id)
   }, [fetch])
+
+  // Recompute portfolio value on every WebSocket tick (live prices)
+  const livePrice = useMemo(() => {
+    const map = {}
+    signals.forEach((s) => { if (s.current != null) map[s.symbol] = s.current })
+    return map
+  }, [signals])
+
+  useEffect(() => {
+    if (portfolio) updateLiveValue(livePrice)
+  }, [livePrice, updateLiveValue]) // portfolio intentionally excluded to avoid loop
 
   return (
     <div className="px-5 py-5 space-y-5 max-w-screen-2xl mx-auto w-full">

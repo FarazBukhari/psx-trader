@@ -54,6 +54,7 @@ to the prediction_log table as fire-and-forget async tasks.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import deque
@@ -62,6 +63,10 @@ from typing import Optional
 from ..db.database import get_session
 from ..db.models import PredictionLog
 from ..strategy.signal_engine import price_buffer
+
+# Serialise all prediction-log writes — prevents "database is locked" when
+# multiple asyncio.create_task calls hit SQLite simultaneously.
+_log_lock = asyncio.Lock()
 
 logger = logging.getLogger(__name__)
 
@@ -819,8 +824,9 @@ class PredictionEngine:
             return
 
         try:
-            async with get_session() as session:
-                session.add_all(rows)
+            async with _log_lock:
+                async with get_session() as session:
+                    session.add_all(rows)
             logger.debug("Logged %d predictions to DB", len(rows))
         except Exception as exc:
             logger.error("Failed to log predictions: %s", exc)

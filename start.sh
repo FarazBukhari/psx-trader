@@ -114,8 +114,15 @@ echo "Press Ctrl+C to stop."
 cleanup() {
   echo ""
   echo "Stopping…"
-  kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null
+  # Kill the entire process group of each child so uvicorn's reloader
+  # worker is also caught (--reload forks a child that kill $PID misses)
+  kill -TERM -"$BACKEND_PID"  2>/dev/null
+  kill -TERM "$FRONTEND_PID"  2>/dev/null
+  # Wait for both to actually exit before printing "Stopped."
+  wait "$BACKEND_PID"  2>/dev/null
+  wait "$FRONTEND_PID" 2>/dev/null
   echo "Stopped."
+  exit 0
 }
 trap cleanup INT TERM
 wait

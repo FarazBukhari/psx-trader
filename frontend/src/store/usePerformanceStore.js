@@ -48,7 +48,7 @@ export const usePerformanceStore = create((set, get) => ({
     }
   },
 
-  fetchHistory: async (limit = 50, offset = 0, symbol = null) => {
+  fetchHistory: async (limit = 500, offset = 0, symbol = null) => {
     try {
       const data = await getTradeHistory(limit, offset, symbol)
       set({ history: data.trades ?? [], historyTotal: data.total ?? 0 })
@@ -65,7 +65,7 @@ export const usePerformanceStore = create((set, get) => ({
       await Promise.all([
         get().fetchSummary(),
         get().fetchLive(),
-        get().fetchHistory(),
+        get().fetchHistory(500),   // load up to 500 trades for the equity curve
       ])
     } finally {
       set({ loading: false })

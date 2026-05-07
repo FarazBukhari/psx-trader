@@ -2,7 +2,7 @@
  * BacktestPanel — run form for single / presets / variants backtests.
  */
 
-import { useState } from 'react'
+import { useState, useImperativeHandle, forwardRef } from 'react'
 import clsx from 'clsx'
 import { runBacktest } from '../../api/backtest'
 import { useBacktestStore } from '../../store/useBacktestStore'
@@ -10,6 +10,7 @@ import Loader from '../common/Loader'
 import ResultsTable from './ResultsTable'
 import EquityChart from './EquityChart'
 import StrategyGuide from './StrategyGuide'
+import TradeLog from './TradeLog'
 
 const MODES = [
   { id: 'single',  label: '⚡ Single',  desc: 'Custom config for one symbol' },
@@ -61,20 +62,46 @@ function ConfigEditor({ cfg, onChange }) {
       <CfgField label="Stop Loss %"  name="stop_loss_pct"       value={cfg.stop_loss_pct}       onChange={set} min={0.5} max={30} step={0.5} />
       <CfgField label="Chg % Thresh" name="change_pct_threshold" value={cfg.change_pct_threshold} onChange={set} min={0.5} max={20} step={0.5} />
       <CfgField label="Position Size" name="position_size_pct"  value={cfg.position_size_pct}  onChange={set} min={0.1} max={1} step={0.1} />
-      <CfgField label="Starting Cash" name="starting_cash"      value={cfg.starting_cash}      onChange={set} min={1000} step={10000} />
+      <CfgField label="Starting Cash" name="starting_cash"      value={cfg.starting_cash}      onChange={set} min={1000} step={1000} />
     </div>
   )
 }
 
-export default function BacktestPanel() {
+const DEFAULT_VARIANTS = [
+  { ...DEFAULT_CFG, name: 'variant-1' },
+  { ...DEFAULT_CFG, name: 'variant-2', rsi_oversold: 25, rsi_overbought: 75, sma_short: 10, sma_long: 30 },
+]
+
+const BacktestPanel = forwardRef(function BacktestPanel(props, ref) {
   const addRun    = useBacktestStore((s) => s.addRun)
-  const [symbol,  setSymbol]  = useState('')
-  const [mode,    setMode]    = useState('presets')
-  const [cfg,     setCfg]     = useState({ ...DEFAULT_CFG })
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState(null)
-  const [result,  setResult]  = useState(null)
+  const [symbol,   setSymbol]   = useState('')
+  const [mode,     setMode]     = useState('presets')
+  const [cfg,      setCfg]      = useState({ ...DEFAULT_CFG })
+  const [variants, setVariants] = useState(DEFAULT_VARIANTS.map((v) => ({ ...v })))
+  const [loading,  setLoading]  = useState(false)
+  const [error,    setError]    = useState(null)
+  const [result,   setResult]   = useState(null)
   const [guideOpen, setGuideOpen] = useState(false)
+
+  useImperativeHandle(ref, () => ({
+    prefillSymbol: (sym) => {
+      setSymbol(sym.toUpperCase())
+      setResult(null)
+      setError(null)
+    },
+  }))
+
+  const updateVariant = (i, updated) =>
+    setVariants((prev) => prev.map((v, idx) => idx === i ? updated : v))
+
+  const addVariant = () =>
+    setVariants((prev) => [
+      ...prev,
+      { ...DEFAULT_CFG, name: `variant-${prev.length + 1}` },
+    ])
+
+  const removeVariant = (i) =>
+    setVariants((prev) => prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev)
 
   const handleRun = async (e) => {
     e.preventDefault()
@@ -87,8 +114,8 @@ export default function BacktestPanel() {
 
     try {
       const payload = { symbol: sym, mode }
-      if (mode === 'single') payload.config = cfg
-      // presets & variants: backend uses built-in configs
+      if (mode === 'single')   payload.config   = cfg
+      if (mode === 'variants') payload.variants = variants
       const data = await runBacktest(payload)
       setResult(data)
       addRun(data)
@@ -106,10 +133,7 @@ export default function BacktestPanel() {
       : result.results || []
     : []
 
-  // True when every result row was skipped (no data / low liquidity)
-  const allSkipped = resultRows.length > 0 && resultRows.every((r) => r.skipped)
-
-  // Pick equity curve for single mode
+  const allSkipped   = resultRows.length > 0 && resultRows.every((r) => r.skipped)
   const equityCurve  = result?.equity_curve || null
   const startingCash = result?.starting_cash || cfg.starting_cash
 
@@ -167,14 +191,56 @@ export default function BacktestPanel() {
             </div>
           </div>
 
-          {/* Config editor for single + variants */}
-          {(mode === 'single' || mode === 'variants') && (
+          {/* Single mode — one config */}
+          {mode === 'single' && (
             <ConfigEditor cfg={cfg} onChange={setCfg} />
+          )}
+
+          {/* Variants mode — multiple named configs */}
+          {mode === 'variants' && (
+            <div className="space-y-3">
+              {variants.map((v, i) => (
+                <div key={i} className="rounded-lg border border-gray-700 overflow-hidden">
+                  {/* Variant header */}
+                  <div className="flex items-center gap-3 px-4 py-2 bg-gray-800/70 border-b border-gray-700">
+                    <input
+                      type="text"
+                      value={v.name}
+                      onChange={(e) => updateVariant(i, { ...v, name: e.target.value })}
+                      placeholder={`variant-${i + 1}`}
+                      className="bg-transparent text-xs font-semibold text-gray-300 focus:outline-none
+                                 border-b border-transparent focus:border-gray-500 w-32"
+                    />
+                    <span className="text-[10px] text-gray-600 ml-auto">Variant {i + 1}</span>
+                    {variants.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => removeVariant(i)}
+                        className="text-[10px] text-gray-700 hover:text-red-500 transition ml-2"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="p-4 bg-gray-800/30">
+                    <ConfigEditor cfg={v} onChange={(updated) => updateVariant(i, updated)} />
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={addVariant}
+                className="text-xs text-gray-500 hover:text-gray-300 transition border border-dashed
+                           border-gray-700 hover:border-gray-600 rounded-lg px-4 py-2 w-full"
+              >
+                + Add Variant
+              </button>
+            </div>
           )}
 
           {mode === 'presets' && (
             <div className="text-xs text-gray-600 bg-gray-800/50 rounded px-3 py-2 border border-gray-700">
-              Runs 4 built-in strategy presets (Conservative, Balanced, Aggressive, Momentum) and compares results.
+              Runs 4 built-in strategy presets (Conservative, Default, Aggressive, Momentum) and compares results.
             </div>
           )}
 
@@ -225,29 +291,43 @@ export default function BacktestPanel() {
             </div>
           )}
 
-          {/* Equity curve (single mode only) */}
-          {equityCurve?.length > 1 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-              <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Equity Curve</div>
-              <EquityChart
-                equityCurve={equityCurve}
-                startingCash={startingCash}
-                label={result.strategy || result.symbol}
-              />
-            </div>
+          {/* Single mode — equity curve + trade log */}
+          {result.mode === 'single' && (
+            <>
+              {equityCurve?.length > 1 && (
+                <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-2">Equity Curve</div>
+                  <EquityChart
+                    equityCurve={equityCurve}
+                    startingCash={startingCash}
+                    label={result.strategy || result.symbol}
+                  />
+                </div>
+              )}
+              {result.trade_log?.length > 0 && (
+                <TradeLog tradeLog={result.trade_log} label={result.strategy} />
+              )}
+            </>
           )}
 
-          {/* Multi-mode equity curves */}
-          {result.results?.length > 0 && result.results.some((r) => r.equity_curve?.length > 1) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Multi-mode — equity curves + trade log per strategy */}
+          {result.results?.length > 0 && (
+            <div className="space-y-4">
               {result.results.map((r, i) => (
-                r.equity_curve?.length > 1 && (
-                  <div key={i} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                    <EquityChart
-                      equityCurve={r.equity_curve}
-                      startingCash={r.starting_cash}
-                      label={r.strategy}
-                    />
+                (r.equity_curve?.length > 1 || r.trade_log?.length > 0) && (
+                  <div key={i} className="space-y-3">
+                    {r.equity_curve?.length > 1 && (
+                      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                        <EquityChart
+                          equityCurve={r.equity_curve}
+                          startingCash={r.starting_cash}
+                          label={r.strategy}
+                        />
+                      </div>
+                    )}
+                    {r.trade_log?.length > 0 && (
+                      <TradeLog tradeLog={r.trade_log} label={r.strategy} />
+                    )}
                   </div>
                 )
               ))}
@@ -259,4 +339,6 @@ export default function BacktestPanel() {
       <StrategyGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   )
-}
+})
+
+export default BacktestPanel

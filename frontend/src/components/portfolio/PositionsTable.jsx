@@ -57,12 +57,20 @@ export default function PositionsTable({ positions = [], onSell }) {
       <table className="min-w-full text-sm">
         <thead className="bg-gray-900/80 sticky top-0">
           <tr>
-            {['Symbol', 'Shares', 'Avg Price', 'Current', 'Value', 'P&L', 'Actions'].map((h) => (
+            {[
+              { label: 'Symbol',    align: 'text-left'  },
+              { label: 'Shares',    align: 'text-right' },
+              { label: 'Avg Price', align: 'text-right' },
+              { label: 'Current',   align: 'text-right' },
+              { label: 'Value',     align: 'text-right' },
+              { label: 'P&L',       align: 'text-right' },
+              { label: 'Actions',   align: 'text-left'  },
+            ].map(({ label, align }) => (
               <th
-                key={h}
-                className="px-3 py-2.5 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap"
+                key={label}
+                className={`px-3 py-2.5 ${align} text-[11px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap`}
               >
-                {h}
+                {label}
               </th>
             ))}
           </tr>

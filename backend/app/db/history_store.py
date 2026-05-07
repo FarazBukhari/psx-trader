@@ -61,6 +61,8 @@ class HistoryStore:
         # Single lock shared by both flush methods so tick and signal flushes
         # don't overlap each other — reduces concurrent SQLite write contention.
         self._flush_lock = asyncio.Lock()
+        # Last saved close price per symbol — used to deduplicate unchanged ticks.
+        self._last_tick_price: dict[str, float] = {}
 
     # ------------------------------------------------------------------
     # Public write API
@@ -69,9 +71,17 @@ class HistoryStore:
     async def save_tick(self, stock: dict) -> None:
         """
         Buffer a scraped price tick.
+        Skips the tick if the close price is identical to the last saved value
+        for this symbol — avoids filling the DB with no-op rows during flat markets.
         Flushes when buffer reaches FLUSH_BATCH_SIZE OR when the oldest buffered
         item is more than FLUSH_MAX_AGE_S seconds old (time-based safety net).
         """
+        symbol = stock.get("symbol", "").upper()
+        close  = stock.get("current", 0.0)
+        if self._last_tick_price.get(symbol) == close:
+            return   # price unchanged — skip
+        self._last_tick_price[symbol] = close
+
         now = time.time()
         if not self._tick_buffer:
             self._tick_buffer_since = now

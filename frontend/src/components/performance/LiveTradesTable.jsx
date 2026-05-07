@@ -5,7 +5,7 @@
  *          duration (live, computed from entry_time), status dot.
  */
 
-import { useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import clsx from 'clsx'
 import Badge from '../common/Badge'
 import { usePerformanceStore } from '../../store/usePerformanceStore'
@@ -24,9 +24,17 @@ function fmtPct(v, showSign = true) {
   return `${sign}${n.toFixed(2)}%`
 }
 
-/** Live elapsed duration from entry_time (Unix s) to now. */
+/**
+ * Live elapsed duration from entry_time (Unix s) to now.
+ * Ticks every 60 s so duration stays accurate without needing a store refresh.
+ */
 function useLiveDuration(entryTimeUnix) {
-  const mins = Math.floor((Date.now() / 1000 - entryTimeUnix) / 60)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+  const mins = Math.floor((now / 1000 - entryTimeUnix) / 60)
   if (mins < 60) return `${mins}m`
   const h = Math.floor(mins / 60)
   const m = mins % 60
@@ -38,14 +46,38 @@ function fmtTime(unix) {
   return new Date(unix * 1000).toLocaleTimeString('en-PK', { hour: '2-digit', minute: '2-digit' })
 }
 
+// ── MFE/MAE computed live from extremes ───────────────────────────────────────
+// mfe_pct / mae_pct in the DB are only written at close. For OPEN trades the
+// DB always has 0.0, but max_price_seen / min_price_seen ARE updated every tick.
+// We recompute here so the table shows live values.
+
+function computeLiveMFE(signal, entry, maxSeen, minSeen) {
+  if (!entry || entry === 0) return null
+  return signal === 'BUY'
+    ? ((maxSeen - entry) / entry) * 100
+    : ((entry - minSeen) / entry) * 100
+}
+
+function computeLiveMAE(signal, entry, maxSeen, minSeen) {
+  if (!entry || entry === 0) return null
+  return signal === 'BUY'
+    ? ((minSeen - entry) / entry) * 100
+    : ((entry - maxSeen) / entry) * 100
+}
+
 // ── row ───────────────────────────────────────────────────────────────────────
 
 function LiveRow({ trade }) {
   const duration = useLiveDuration(trade.entry_time)
 
-  // Approximate live MFE/MAE from stored extremes
-  const mfe = trade.mfe_pct
-  const mae = trade.mae_pct
+  // For OPEN trades: recompute from extremes. For CLOSED: use stored values.
+  const isOpen = trade.status === 'OPEN'
+  const mfe = isOpen
+    ? computeLiveMFE(trade.signal, trade.entry_price, trade.max_price_seen, trade.min_price_seen)
+    : trade.mfe_pct
+  const mae = isOpen
+    ? computeLiveMAE(trade.signal, trade.entry_price, trade.max_price_seen, trade.min_price_seen)
+    : trade.mae_pct
 
   return (
     <tr className="border-b border-gray-800/60 hover:bg-gray-800/30 transition-colors">
