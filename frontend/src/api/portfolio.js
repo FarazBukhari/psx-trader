@@ -7,6 +7,7 @@ export const setCash         = (amount) => api('/api/portfolio/cash', { method: 
 export const addPosition     = (data)   => api('/api/portfolio/positions', { method: 'POST', body: data })
 export const removePosition  = (symbol) => api(`/api/portfolio/positions/${encodeURIComponent(symbol)}`, { method: 'DELETE' })
 export const resetPositions  = ()       => api('/api/portfolio/reset', { method: 'DELETE' })
-export const getSnapshots    = (limit = 500) => api(`/api/portfolio/snapshots?limit=${limit}`)
+export const getSnapshots           = (limit = 500) => api(`/api/portfolio/snapshots?limit=${limit}`)
+export const getPortfolioHistoryToday = ()           => api('/api/portfolio/history/today')
 export const getTrades       = (limit = 50, offset = 0) => api(`/api/trades?limit=${limit}&offset=${offset}`)
 export const getTradesForSym = (symbol, limit = 50) => api(`/api/trades/${encodeURIComponent(symbol)}?limit=${limit}`)

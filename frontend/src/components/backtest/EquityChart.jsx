@@ -49,11 +49,15 @@ export default function EquityChart({ equityCurve = [], startingCash = null, lab
             interval="preserveStartEnd"
           />
           <YAxis
-            tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
+            tickFormatter={(v) => `${(v / 1000).toFixed(1)}K`}
             tick={{ fill: '#6b7280', fontSize: 10 }}
             axisLine={false}
             tickLine={false}
-            width={44}
+            width={48}
+            domain={[
+              (min) => Math.floor(min * 0.98),
+              (max) => Math.ceil(max  * 1.02),
+            ]}
           />
           {startingCash != null && (
             <ReferenceLine y={startingCash} stroke="#374151" strokeDasharray="4 2" />

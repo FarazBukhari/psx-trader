@@ -2,6 +2,7 @@
  * PortfolioBar — top summary strip: total value, cash, unrealized P&L, realized P&L.
  */
 
+import { useState } from 'react'
 import clsx from 'clsx'
 import Loader from '../common/Loader'
 import { useMarketStore } from '../../store/useMarketStore'
@@ -22,10 +23,41 @@ function PLValue({ value, pct }) {
   )
 }
 
-function Stat({ label, value, className, children }) {
+function InfoIcon({ tip }) {
+  const [show, setShow] = useState(false)
+  return (
+    <span className="relative inline-flex items-center ml-1">
+      <button
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onFocus={() => setShow(true)}
+        onBlur={() => setShow(false)}
+        className="text-gray-700 hover:text-gray-400 transition leading-none focus:outline-none"
+        tabIndex={0}
+        aria-label="Info"
+      >
+        <svg width="11" height="11" viewBox="0 0 12 12" fill="currentColor">
+          <circle cx="6" cy="6" r="5.5" stroke="currentColor" strokeWidth="1" fill="none"/>
+          <text x="6" y="9" textAnchor="middle" fontSize="8" fontWeight="bold" fill="currentColor">i</text>
+        </svg>
+      </button>
+      {show && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-52 bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-[11px] text-gray-300 shadow-xl leading-relaxed pointer-events-none">
+          {tip}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-700" />
+        </div>
+      )}
+    </span>
+  )
+}
+
+function Stat({ label, tip, value, className, children }) {
   return (
     <div className="flex flex-col gap-0.5 min-w-0">
-      <span className="text-[10px] text-gray-600 uppercase tracking-wider whitespace-nowrap">{label}</span>
+      <span className="text-[10px] text-gray-600 uppercase tracking-wider whitespace-nowrap flex items-center">
+        {label}
+        {tip && <InfoIcon tip={tip} />}
+      </span>
       {children || (
         <span className={clsx('text-sm font-semibold font-mono tabular-nums text-gray-100 truncate', className)}>
           {value ?? '—'}
@@ -79,23 +111,45 @@ export default function PortfolioBar({ portfolio, loading }) {
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-lg px-5 py-3 flex flex-wrap gap-6 items-center">
-      <Stat label="Portfolio Value" value={`PKR ${fmt(liveTotalValue)}`} className="text-white text-base" />
+      <Stat
+        label="Portfolio Value"
+        tip="Total current value of your portfolio: cash on hand plus the live market value of all open positions."
+        value={`PKR ${fmt(liveTotalValue)}`}
+        className="text-white text-base"
+      />
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
-      <Stat label="Cash Available" value={`PKR ${fmt(p.cash_available)}`} />
+      <Stat
+        label="Cash Available"
+        tip="Uninvested cash in your account. This is what you can deploy on the next trade after accounting for brokerage fees."
+        value={`PKR ${fmt(p.cash_available)}`}
+      />
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
-      <Stat label="Unrealized P&L">
+      <Stat
+        label="Unrealized P&L"
+        tip="Paper profit or loss on your open positions. Calculated as (current live price − avg cost) × shares. Not locked in until you sell."
+      >
         <PLValue value={liveUnrealizedPL} />
       </Stat>
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
-      <Stat label="Realized P&L">
+      <Stat
+        label="Realized P&L"
+        tip="Profit or loss from trades you have already closed. This is actual money gained or lost after selling, net of brokerage fees."
+      >
         <PLValue value={p.realized_pl} />
       </Stat>
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
-      <Stat label="Total P&L">
+      <Stat
+        label="Total P&L"
+        tip="Unrealized P&L plus Realized P&L combined. The percentage shown is relative to your total cost basis across all positions."
+      >
         <PLValue value={liveTotalPL} pct={liveTotalPLPct} />
       </Stat>
       <div className="w-px h-8 bg-gray-800 hidden md:block" />
-      <Stat label="Positions" value={p.position_count ?? 0} />
+      <Stat
+        label="Positions"
+        tip="Number of stocks you currently hold. Each position represents a unique symbol with at least one share."
+        value={p.position_count ?? 0}
+      />
     </div>
   )
 }

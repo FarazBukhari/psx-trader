@@ -28,7 +28,7 @@ export const useBacktestStore = create((set) => ({
       mode:         result.mode,
       strategy:     best?.strategy ?? '—',
       return_pct:   best?.return_pct ?? null,
-      total_trades: best?.total_trades ?? null,
+      trades:       best?.trades ?? null,
       win_rate:     best?.win_rate ?? null,
     }
 

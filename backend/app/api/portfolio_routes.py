@@ -21,11 +21,12 @@ All trade-execution endpoints require:
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select, desc
-from ..db.models import PortfolioSnapshot
+from ..db.models import Portfolio, Position, PriceHistory, PortfolioSnapshot
 from ..db.database import get_session
 
 from ..portfolio.portfolio_manager import (
@@ -257,6 +258,84 @@ async def get_portfolio_snapshots(
     return {"snapshots": snapshots, "count": len(snapshots)}
 
 
+@portfolio_router.get(
+    "/portfolio/history/today",
+    summary="Reconstruct today's intraday portfolio value from live price ticks",
+)
+async def get_portfolio_history_today() -> dict:
+    """
+    Walk today's live price_history ticks for every current position and
+    reconstruct what the total portfolio value was at each tick.
+
+    Algorithm:
+      1. Load current positions (shares) and cash from DB.
+      2. Query all live ticks today (source='live') for those symbols.
+      3. Walk timestamps in order, tracking the last known price per symbol.
+      4. Emit a value point whenever we have a price for every position.
+
+    Returns oldest-first list of { ts: ms, value: float }.
+    """
+    PKT = timezone(timedelta(hours=5))
+
+    async with get_session() as session:
+        # ── 1. Load portfolio ────────────────────────────────────────────────
+        port_row = (
+            await session.execute(select(Portfolio).where(Portfolio.id == 1))
+        ).scalar_one_or_none()
+        if port_row is None:
+            return {"points": []}
+
+        pos_rows = (
+            await session.execute(
+                select(Position).where(Position.portfolio_id == 1)
+            )
+        ).scalars().all()
+
+        if not pos_rows:
+            return {"points": []}
+
+        cash    = port_row.cash_available
+        symbols = [p.symbol for p in pos_rows]
+        shares  = {p.symbol: p.shares for p in pos_rows}
+
+        # ── 2. Today's session start (09:30 PKT) as a Unix timestamp ────────
+        now_pkt      = datetime.now(tz=PKT)
+        session_open = now_pkt.replace(hour=9, minute=30, second=0, microsecond=0)
+        session_open_ts = int(session_open.timestamp())
+
+        # ── 3. Fetch live ticks for position symbols since 09:30 ────────────
+        q = (
+            select(PriceHistory.scraped_at, PriceHistory.symbol, PriceHistory.close)
+            .where(
+                PriceHistory.source == "live",
+                PriceHistory.scraped_at >= session_open_ts,
+                PriceHistory.symbol.in_(symbols),
+            )
+            .order_by(PriceHistory.scraped_at)
+        )
+        ticks = (await session.execute(q)).all()
+
+    # ── 4. Reconstruct portfolio value at each tick ──────────────────────────
+    # Group ticks by scraped_at so we update all symbols from one scrape batch together
+    from collections import defaultdict
+    batches: dict[int, dict[str, float]] = defaultdict(dict)
+    for scraped_at, symbol, close in ticks:
+        batches[scraped_at][symbol] = close
+
+    last_price: dict[str, float] = {}
+    points: list[dict] = []
+
+    for ts in sorted(batches):
+        last_price.update(batches[ts])
+        # Only emit once every symbol has been seen at least once
+        if len(last_price) < len(symbols):
+            continue
+        value = cash + sum(shares[sym] * last_price[sym] for sym in symbols)
+        points.append({"ts": ts * 1000, "value": round(value, 2)})
+
+    return {"points": points}
+
+
 # ---------------------------------------------------------------------------
 # Trade execution
 # ---------------------------------------------------------------------------
@@ -278,6 +357,7 @@ async def execute_buy(payload: BuyRequest) -> TradeResult:
     Validates:
     - Market is OPEN and data is live (HTTP 423 otherwise)
     - Rate limit not exceeded (HTTP 429 otherwise)
+    - Submitted price within 2% of live market price (HTTP 422 otherwise)
     - Sufficient cash including fees (HTTP 422 otherwise)
 
     On success:
@@ -285,6 +365,27 @@ async def execute_buy(payload: BuyRequest) -> TradeResult:
     - Creates or updates position (weighted average cost basis)
     - Returns the trade record + updated portfolio summary
     """
+    sym = payload.symbol.strip().upper()
+    market_price = _current_prices().get(sym)
+    if market_price is not None:
+        deviation = abs(payload.price - market_price) / market_price
+        if deviation > 0.02:
+            logger.warning(
+                "Price deviation rejected: symbol=%s deviation=%.2f%% user_price=%.2f market_price=%.2f",
+                sym, deviation * 100, payload.price, market_price,
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code":    "PRICE_DEVIATION",
+                    "message": (
+                        f"Submitted price PKR {payload.price:.2f} deviates "
+                        f"{deviation * 100:.1f}% from market price "
+                        f"PKR {market_price:.2f} (max 2%)."
+                    ),
+                },
+            )
+
     try:
         trade     = await _pm.execute_buy(
             symbol=payload.symbol,
@@ -326,11 +427,33 @@ async def execute_sell(payload: SellRequest) -> TradeResult:
     Validates:
     - Market is OPEN and data is live (HTTP 423 otherwise)
     - Rate limit not exceeded (HTTP 429 otherwise)
+    - Submitted price within 2% of live market price (HTTP 422 otherwise)
     - Position exists with sufficient shares (HTTP 422 / 404 otherwise)
 
     Realized P&L = net proceeds − cost basis (pre-CGT).
     On success adds net proceeds to cash and reduces / closes the position.
     """
+    sym = payload.symbol.strip().upper()
+    market_price = _current_prices().get(sym)
+    if market_price is not None:
+        deviation = abs(payload.price - market_price) / market_price
+        if deviation > 0.02:
+            logger.warning(
+                "Price deviation rejected: symbol=%s deviation=%.2f%% user_price=%.2f market_price=%.2f",
+                sym, deviation * 100, payload.price, market_price,
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code":    "PRICE_DEVIATION",
+                    "message": (
+                        f"Submitted price PKR {payload.price:.2f} deviates "
+                        f"{deviation * 100:.1f}% from market price "
+                        f"PKR {market_price:.2f} (max 2%)."
+                    ),
+                },
+            )
+
     try:
         trade     = await _pm.execute_sell(
             symbol=payload.symbol,

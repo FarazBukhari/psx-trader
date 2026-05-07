@@ -1,25 +1,31 @@
 """
-PSX Brokerage Fee Calculator.
+PSX Brokerage Fee Calculator — Finqalab.
 
-Fee structure (Pakistan Stock Exchange, discount broker):
-  - Commission:   0.15% of trade value  (TREC holder fee)
-  - CDC charge:   PKR 10.00 flat        (Central Depository Company)
-  - SECP levy:    0.0115% of trade value (Securities & Exchange Commission)
+Fee structure confirmed from Finqalab cashbook (07/05/2026):
+  - Brokerage (BRK): 0.25% of trade value — only active charge
+  - CVT:             0.00  (Capital Value Tax — currently zero)
+  - WHT:             0.00  (Withholding Tax — currently zero)
+  - FED:             0.00  (Federal Excise Duty — currently zero)
+  - CDC flat charge: 0.00  (not charged by Finqalab)
+  - SECP levy:       0.00  (not charged by Finqalab)
 
-Total per-side:   ~0.1615% + PKR 10
-Round-trip cost:  ~0.323% + PKR 20
+Total per-side:   0.25% of trade value
+Round-trip cost:  0.50% of trade value
 
-Note: Capital Gains Tax (CGT) applies on profitable sells, but is calculated
-at year-end by the broker and deducted from the account. We do not compute it
-here because it depends on holding period (FIFO) and annual income bracket.
-The P&L shown in this system is PRE-CGT.
+Verification (from cashbook):
+  SSGC BUY  209 × 28.72  = 6002.48 → BRK 15.01  (×0.0025 = 15.006 ✓)
+  SSGC BUY   10 × 28.69  =  286.90 → BRK  0.72  (×0.0025 =  0.717 ✓)
+  HASCOL SELL 47 × 22.92 = 1077.24 → BRK  2.69  (×0.0025 =  2.693 ✓)
 
-All rates are configurable via strategy.json:
+Note: CGT applies on profitable sells but is handled at year-end by the broker.
+P&L shown in this system is PRE-CGT.
+
+Rates are configurable via strategy.json:
   {
     "global": {
-      "commission_rate": 0.0015,
-      "cdc_charge": 10.0,
-      "secp_rate": 0.000115
+      "commission_rate": 0.0025,
+      "cdc_charge": 0.0,
+      "secp_rate": 0.0
     }
   }
 """
@@ -28,10 +34,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Default rates — overridable via load_fee_config()
-_DEFAULT_COMMISSION_RATE = 0.0015     # 0.15%
-_DEFAULT_CDC_CHARGE      = 10.0       # PKR 10 flat
-_DEFAULT_SECP_RATE       = 0.000115   # 0.0115%
+# Finqalab confirmed rates (cashbook 07/05/2026)
+_DEFAULT_COMMISSION_RATE = 0.0025     # 0.25% — sole active charge
+_DEFAULT_CDC_CHARGE      = 0.0        # not charged by Finqalab
+_DEFAULT_SECP_RATE       = 0.0        # not charged by Finqalab
 
 
 @dataclass(frozen=True)

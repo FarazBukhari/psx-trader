@@ -206,22 +206,7 @@ async def run_backtest(req: BacktestRunRequest):
             "symbol":  sym,
             "ran_at":  ran_at,
             "count":   len(results),
-            "results": [
-                {
-                    "strategy":         r.strategy,
-                    "return_pct":       r.return_pct,
-                    "win_rate":         r.win_rate,
-                    "max_drawdown_pct": r.max_drawdown_pct,
-                    "profit_factor":    r.profit_factor,
-                    "sharpe_ratio":     r.sharpe_ratio,
-                    "trades":           r.trades,
-                    "final_equity":     r.final_equity,
-                    "ticks_used":       r.ticks_used,
-                    "trade_log":        r.trade_log,
-                    "equity_curve":     r.equity_curve,
-                    "config":           r.config,
-                }
-                for r in results
+            "results": [r.to_dict() for r in results
             ],
         }
 

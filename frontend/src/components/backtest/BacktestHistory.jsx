@@ -78,10 +78,10 @@ export default function BacktestHistory() {
                   <td className="py-1.5 pr-4 text-gray-300 max-w-[140px] truncate">{run.strategy}</td>
                   <td className={clsx('py-1.5 pr-4 text-right font-mono', retColor)}>{pct(ret)}</td>
                   <td className="py-1.5 pr-4 text-right text-gray-400 font-mono">
-                    {run.total_trades ?? '—'}
+                    {run.trades ?? '—'}
                   </td>
                   <td className="py-1.5 text-right text-gray-400 font-mono">
-                    {run.win_rate != null ? pct(run.win_rate * 100, 0) : '—'}
+                    {run.win_rate != null ? pct(run.win_rate, 0) : '—'}
                   </td>
                 </tr>
               )

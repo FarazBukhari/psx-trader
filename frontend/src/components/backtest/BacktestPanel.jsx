@@ -9,6 +9,7 @@ import { useBacktestStore } from '../../store/useBacktestStore'
 import Loader from '../common/Loader'
 import ResultsTable from './ResultsTable'
 import EquityChart from './EquityChart'
+import StrategyGuide from './StrategyGuide'
 
 const MODES = [
   { id: 'single',  label: '⚡ Single',  desc: 'Custom config for one symbol' },
@@ -73,6 +74,7 @@ export default function BacktestPanel() {
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState(null)
   const [result,  setResult]  = useState(null)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   const handleRun = async (e) => {
     e.preventDefault()
@@ -115,7 +117,18 @@ export default function BacktestPanel() {
     <div className="space-y-5">
       {/* ── Form ── */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-5">
-        <h3 className="text-sm font-bold text-gray-200 mb-4 uppercase tracking-wide">Run Backtest</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-gray-200 uppercase tracking-wide">Run Backtest</h3>
+          <button
+            type="button"
+            onClick={() => setGuideOpen(true)}
+            title="Explain strategy parameters"
+            className="w-5 h-5 rounded-full border border-gray-600 text-gray-500 hover:text-gray-200
+                       hover:border-gray-400 transition text-[11px] font-bold leading-none flex items-center justify-center"
+          >
+            ?
+          </button>
+        </div>
         <form onSubmit={handleRun} className="space-y-4">
           {/* Symbol + Mode */}
           <div className="flex flex-wrap gap-4 items-end">
@@ -242,6 +255,8 @@ export default function BacktestPanel() {
           )}
         </div>
       )}
+
+      <StrategyGuide open={guideOpen} onClose={() => setGuideOpen(false)} />
     </div>
   )
 }

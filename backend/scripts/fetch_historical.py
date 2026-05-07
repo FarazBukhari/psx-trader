@@ -51,6 +51,8 @@ DEFAULT_SYMBOLS = [
     "SNGPL", "SSGC",  "KAPCO","NCPL",  "DGKC",  "MLCF",  "FCCL",
     "ACPL",  "CHCC",  "KOHC", "PIOC",  "FABL",  "BAFL",  "SILK",
     "ATRL",  "APL",   "SHEL", "PSX",   "PAKT",  "GATM",  "COLG",
+    # Portfolio holdings
+    "MIIETF", "HASCOL",
 ]
 
 

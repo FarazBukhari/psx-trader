@@ -36,8 +36,13 @@ from __future__ import annotations
 import logging
 import math
 import time
+from collections import OrderedDict
 from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone, timedelta
 from typing import Optional
+
+# PKT = UTC+5
+_PKT = timezone(timedelta(hours=5))
 
 from ..db.database import get_session
 from ..db.models import PriceHistory
@@ -460,6 +465,22 @@ class Backtester:
             for r in rows
         ]
 
+    @staticmethod
+    def _daily_close_rows(rows: list[dict]) -> list[dict]:
+        """
+        Collapse intraday ticks to one row per calendar day (PKT).
+
+        For historical EOD data this is a no-op (already one row/day).
+        For today's live feed this keeps only the latest tick, preventing
+        the equity curve from showing hundreds of points for a single day.
+        The last row per day is used as the daily closing price.
+        """
+        by_day: OrderedDict = OrderedDict()
+        for row in rows:
+            day_key = datetime.fromtimestamp(row["scraped_at"], tz=_PKT).date()
+            by_day[day_key] = row   # last row per day wins
+        return list(by_day.values())
+
     async def run(
         self,
         symbol:   str,
@@ -479,7 +500,7 @@ class Backtester:
         Returns:
             BacktestResult with full metrics, trade log, equity curve.
         """
-        rows = await self._load_rows(symbol, start_ts, end_ts)
+        rows = self._daily_close_rows(await self._load_rows(symbol, start_ts, end_ts))
         if len(rows) < MIN_TICKS:
             logger.warning(
                 "Backtest %s: insufficient data (%d rows, need %d)",
@@ -560,7 +581,7 @@ class Backtester:
         Run multiple strategy configs against the same symbol and date range.
         Returns a list of results, one per variant, sorted by return_pct desc.
         """
-        rows = await self._load_rows(symbol, start_ts, end_ts)
+        rows = self._daily_close_rows(await self._load_rows(symbol, start_ts, end_ts))
         if len(rows) < MIN_TICKS:
             return [
                 self._empty_result(symbol, c, start_ts, end_ts, len(rows), skipped="insufficient_data")
@@ -639,7 +660,7 @@ class Backtester:
 
         Returns WalkForwardResult with per-window summaries + aggregate stats.
         """
-        rows = await self._load_rows(symbol)
+        rows = self._daily_close_rows(await self._load_rows(symbol))
         if len(rows) < 20:
             logger.warning("Walk-forward %s: too little data (%d rows)", symbol, len(rows))
             return WalkForwardResult(

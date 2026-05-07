@@ -28,7 +28,7 @@ from typing import Optional
 import httpx
 from bs4 import BeautifulSoup
 
-from ..market_hours import market_status, MarketStatus
+from ..market_hours import market_status, MarketStatus, MarketState
 
 logger = logging.getLogger(__name__)
 
@@ -246,6 +246,10 @@ class PSXScraper:
             logger.info("Market closed — forced final snapshot flush")
         self._was_market_open = status.is_open
 
+        # Stop live scraping once the session ends. PSX's site transitions to
+        # settlement/adjusted prices right after 15:30 which causes erratic
+        # jumps. The last in-session snapshot IS the correct closing price —
+        # serve it as stale so the portfolio bar stays accurate without noise.
         if not status.is_open:
             return self._serve_stale(
                 reason=f"Market closed — {status.reason}",
