@@ -116,25 +116,67 @@ async def fetch_eod(client: httpx.AsyncClient, symbol: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 async def insert_rows(rows: list[dict]) -> int:
-    """Bulk-insert into price_history, skipping duplicates on (symbol, scraped_at)."""
+    """
+    Bulk-insert into price_history (legacy) AND eod_prices (new),
+    skipping duplicates in both tables.
+
+    price_history: unique on (symbol, scraped_at)
+    eod_prices:    unique on (symbol, date_key)
+    """
     if not rows:
         return 0
 
+    from datetime import datetime, timezone, timedelta
     from app.db.database import get_session
-    from app.db.models import PriceHistory
+    from app.db.models import EODPrice, PriceHistory
     from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+    _PKT = timezone(timedelta(hours=5))
+
+    def _ts_to_date_key(ts: int) -> int:
+        dt = datetime.fromtimestamp(ts, tz=_PKT)
+        return dt.year * 10_000 + dt.month * 100 + dt.day
+
+    # Build eod_prices rows from the historical dicts
+    eod_rows = [
+        {
+            "symbol":     r["symbol"],
+            "date_key":   _ts_to_date_key(int(r["scraped_at"])),
+            "sector":     r.get("sector"),
+            "open_price": r.get("open_price"),
+            "high":       r.get("high"),
+            "low":        r.get("low"),
+            "close":      r["close"],
+            "volume":     r.get("volume"),
+            "change_pct": r.get("change_pct"),
+            "ldcp":       r.get("ldcp"),
+            "scraped_at": int(r["scraped_at"]),
+        }
+        for r in rows
+    ]
 
     inserted = 0
     for i in range(0, len(rows), 500):
-        batch = rows[i:i + 500]
+        ph_batch  = rows[i:i + 500]
+        eod_batch = eod_rows[i:i + 500]
+
         async with get_session() as session:
-            stmt = (
+            # Legacy price_history insert
+            ph_stmt = (
                 sqlite_insert(PriceHistory)
-                .values(batch)
+                .values(ph_batch)
                 .on_conflict_do_nothing()
             )
-            result = await session.execute(stmt)
+            result = await session.execute(ph_stmt)
             inserted += result.rowcount or 0
+
+            # New eod_prices insert (unique on symbol + date_key)
+            eod_stmt = (
+                sqlite_insert(EODPrice)
+                .values(eod_batch)
+                .on_conflict_do_nothing()
+            )
+            await session.execute(eod_stmt)
 
     return inserted
 
