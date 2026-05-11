@@ -8,6 +8,7 @@
 *.db-wal
 last_snapshot.json
 signals_snapshot.json
+config/strategy.json
 backend/logs/
 backend/test_write.txt
 
