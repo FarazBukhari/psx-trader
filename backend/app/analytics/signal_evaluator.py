@@ -50,7 +50,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from ..db.database import get_session
-from ..db.models import PriceHistory, SignalLog, SignalOutcome
+from ..db.models import IntradayTick, PriceHistory, SignalLog, SignalOutcome
 from ..market_hours import PKT, _next_business_open
 
 logger = logging.getLogger("psx.signal_evaluator")
@@ -184,13 +184,25 @@ async def _fetch_prices_batch(
             lo = min(ts_list) - _PRICE_SEARCH_WINDOW_S
             hi = max(ts_list)
 
+        # ── Try intraday_ticks first ──────────────────────────────────
         stmt = (
-            select(PriceHistory.scraped_at, PriceHistory.close)
-            .where(PriceHistory.symbol == sym)
-            .where(PriceHistory.scraped_at.between(lo, hi))
-            .order_by(PriceHistory.scraped_at.asc())   # ASC for bisect
+            select(IntradayTick.scraped_at, IntradayTick.close)
+            .where(IntradayTick.symbol == sym)
+            .where(IntradayTick.scraped_at.between(lo, hi))
+            .order_by(IntradayTick.scraped_at.asc())   # ASC for bisect
         )
         rows = (await session.execute(stmt)).all()
+
+        # ── Fall back to legacy price_history ────────────────────────
+        if not rows:
+            stmt = (
+                select(PriceHistory.scraped_at, PriceHistory.close)
+                .where(PriceHistory.symbol == sym)
+                .where(PriceHistory.scraped_at.between(lo, hi))
+                .order_by(PriceHistory.scraped_at.asc())
+            )
+            rows = (await session.execute(stmt)).all()
+
         if not rows:
             continue
 

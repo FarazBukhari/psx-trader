@@ -6,6 +6,7 @@
 *.db-journal
 *.db-shm
 *.db-wal
+*.bak
 last_snapshot.json
 signals_snapshot.json
 config/strategy.json
@@ -208,3 +209,4 @@ bower_components
 psd
 thumb
 sketch
+.fuse_hidden*

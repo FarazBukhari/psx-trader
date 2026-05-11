@@ -36,7 +36,7 @@ from typing import Optional
 from sqlalchemy import select
 
 from ..db.database import get_session
-from ..db.models import PredictionLog, PriceHistory
+from ..db.models import IntradayTick, PredictionLog, PriceHistory
 
 logger = logging.getLogger("psx.prediction_resolver")
 
@@ -174,13 +174,23 @@ async def resolve_pending_predictions(batch_size: int = 500) -> int:
             lo      = min(ts_list)
             hi      = max(ts_list) + _SEARCH_WINDOW_S
 
+            # Try intraday_ticks first, fall back to legacy price_history
             ph_stmt = (
-                select(PriceHistory.scraped_at, PriceHistory.close)
-                .where(PriceHistory.symbol == sym)
-                .where(PriceHistory.scraped_at.between(lo, hi))
-                .order_by(PriceHistory.scraped_at.asc())
+                select(IntradayTick.scraped_at, IntradayTick.close)
+                .where(IntradayTick.symbol == sym)
+                .where(IntradayTick.scraped_at.between(lo, hi))
+                .order_by(IntradayTick.scraped_at.asc())
             )
             ph_rows = (await session.execute(ph_stmt)).all()
+
+            if not ph_rows:
+                ph_stmt = (
+                    select(PriceHistory.scraped_at, PriceHistory.close)
+                    .where(PriceHistory.symbol == sym)
+                    .where(PriceHistory.scraped_at.between(lo, hi))
+                    .order_by(PriceHistory.scraped_at.asc())
+                )
+                ph_rows = (await session.execute(ph_stmt)).all()
 
             if not ph_rows:
                 for pred_id, _ in id_ts_pairs:

@@ -45,10 +45,16 @@ from typing import Optional
 _PKT = timezone(timedelta(hours=5))
 
 from ..db.database import get_session
-from ..db.models import PriceHistory
+from ..db.models import EODPrice, PriceHistory
 from ..portfolio.fees import calculate_fee
 from .core import generate_signal
 from sqlalchemy import select
+
+
+def _ts_to_date_key(ts: int) -> int:
+    """Convert a Unix timestamp to an integer YYYYMMDD date key in PKT (UTC+5)."""
+    dt = datetime.fromtimestamp(ts, tz=_PKT)
+    return dt.year * 10_000 + dt.month * 100 + dt.day
 
 logger = logging.getLogger(__name__)
 
@@ -437,10 +443,54 @@ class Backtester:
         start_ts: Optional[int] = None,
         end_ts:   Optional[int] = None,
     ) -> list[dict]:
-        """Fetch price rows from DB, ordered oldest-first."""
+        """
+        Fetch price rows from DB for backtesting, ordered oldest-first.
+
+        Priority:
+          1. eod_prices  — daily OHLCV, the correct source for backtesting.
+          2. price_history (source='historical') — legacy fallback while migration
+             is in progress or for symbols not yet in eod_prices.
+
+        date_key range filtering is used for eod_prices (cheaper than timestamp);
+        raw scraped_at filtering is used for the legacy fallback.
+        """
+        sym = symbol.upper()
+
+        # ── Try eod_prices first ──────────────────────────────────────────
         async with get_session() as session:
-            q = select(PriceHistory).where(
-                PriceHistory.symbol == symbol.upper()
+            q = select(EODPrice).where(EODPrice.symbol == sym)
+            if start_ts:
+                start_key = _ts_to_date_key(start_ts)
+                q = q.where(EODPrice.date_key >= start_key)
+            if end_ts:
+                end_key = _ts_to_date_key(end_ts)
+                q = q.where(EODPrice.date_key <= end_key)
+            q = q.order_by(EODPrice.date_key.asc())
+            result = await session.execute(q)
+            eod_rows = result.scalars().all()
+
+        if eod_rows:
+            return [
+                {
+                    "id":         r.id,
+                    "symbol":     r.symbol,
+                    "close":      r.close,
+                    "high":       r.high,
+                    "low":        r.low,
+                    "open":       r.open_price,
+                    "volume":     r.volume,
+                    "change_pct": r.change_pct,
+                    "scraped_at": r.scraped_at,
+                }
+                for r in eod_rows
+            ]
+
+        # ── Fallback: legacy price_history (source='historical') ──────────
+        async with get_session() as session:
+            q = (
+                select(PriceHistory)
+                .where(PriceHistory.symbol == sym)
+                .where(PriceHistory.source == "historical")
             )
             if start_ts:
                 q = q.where(PriceHistory.scraped_at >= start_ts)
@@ -448,22 +498,29 @@ class Backtester:
                 q = q.where(PriceHistory.scraped_at <= end_ts)
             q = q.order_by(PriceHistory.scraped_at.asc())
             result = await session.execute(q)
-            rows = result.scalars().all()
+            legacy_rows = result.scalars().all()
 
-        return [
-            {
-                "id":         r.id,
-                "symbol":     r.symbol,
-                "close":      r.close,
-                "high":       r.high,
-                "low":        r.low,
-                "open":       r.open_price,
-                "volume":     r.volume,
-                "change_pct": r.change_pct,
-                "scraped_at": r.scraped_at,
-            }
-            for r in rows
-        ]
+        if legacy_rows:
+            logger.debug(
+                "Backtester %s: using legacy price_history fallback (%d rows)",
+                sym, len(legacy_rows),
+            )
+            return [
+                {
+                    "id":         r.id,
+                    "symbol":     r.symbol,
+                    "close":      r.close,
+                    "high":       r.high,
+                    "low":        r.low,
+                    "open":       r.open_price,
+                    "volume":     r.volume,
+                    "change_pct": r.change_pct,
+                    "scraped_at": r.scraped_at,
+                }
+                for r in legacy_rows
+            ]
+
+        return []
 
     @staticmethod
     def _daily_close_rows(rows: list[dict]) -> list[dict]:

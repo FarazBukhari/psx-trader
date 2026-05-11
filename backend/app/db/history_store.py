@@ -2,11 +2,19 @@
 HistoryStore — async interface between the app and the database.
 
 Responsibilities:
-  - Persist every scraped price tick (save_tick)
-  - Persist every generated signal (save_signal)
-  - Return price history for a symbol (get_history)
+  - Persist every scraped price tick (save_tick → intraday_ticks)
+  - Persist every EOD price row (save_eod_tick → eod_prices)
+  - Persist every generated signal (save_signal → signals_log)
+  - Return intraday price history for a symbol (get_history)
+  - Return EOD price history for a symbol (get_eod_history)
   - Return recent signals for a symbol (get_recent_signals)
   - Warm the in-memory PriceBuffer from DB on startup (warm_price_buffer)
+
+Table routing:
+  - Live scrape ticks              → intraday_ticks   (new)
+  - Historical / EOD download rows → eod_prices        (new)
+  - price_history                  → legacy table, kept for reads during transition;
+                                     HistoryStore no longer writes to it.
 
 Design notes:
   - All public methods are async.
@@ -23,18 +31,28 @@ import json
 import logging
 import time
 from collections import defaultdict
+from datetime import datetime, timezone, timedelta
 from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import select, func, text
 
 from .database import get_session
-from .models import PriceHistory, SignalLog
+from .models import EODPrice, IntradayTick, PriceHistory, SignalLog
 
 if TYPE_CHECKING:
     # Avoid circular import — signal_engine imports from here at runtime too
     from ..strategy.signal_engine import PriceBuffer, SignalEngine, VolumeSpikeStrategy
 
 logger = logging.getLogger(__name__)
+
+# PKT = UTC+5
+_PKT = timezone(timedelta(hours=5))
+
+
+def _ts_to_date_key(ts: int) -> int:
+    """Convert a Unix timestamp to an integer YYYYMMDD date key in PKT."""
+    dt = datetime.fromtimestamp(ts, tz=_PKT)
+    return dt.year * 10_000 + dt.month * 100 + dt.day
 
 
 class HistoryStore:
@@ -43,13 +61,15 @@ class HistoryStore:
 
     Usage:
         store = HistoryStore()
-        await store.save_tick(stock_dict)
-        history = await store.get_history("ENGRO", n=60)
+        await store.save_tick(stock_dict)          # intraday live tick
+        await store.save_eod_tick(stock_dict)      # EOD historical row
+        history     = await store.get_history("ENGRO", n=60)
+        eod_history = await store.get_eod_history("ENGRO", n=200)
         await store.warm_price_buffer(price_buffer)
     """
 
     # Flush to DB when buffer reaches this size OR when max age elapses.
-    FLUSH_BATCH_SIZE  = 20    # was 10 — fewer, larger writes
+    FLUSH_BATCH_SIZE  = 20    # fewer, larger writes
     FLUSH_MAX_AGE_S   = 60    # flush at most 60 s after the first item was buffered
 
     def __init__(self) -> None:
@@ -70,7 +90,8 @@ class HistoryStore:
 
     async def save_tick(self, stock: dict) -> None:
         """
-        Buffer a scraped price tick.
+        Buffer a scraped price tick → intraday_ticks.
+
         Skips the tick if the close price is identical to the last saved value
         for this symbol — avoids filling the DB with no-op rows during flat markets.
         Flushes when buffer reaches FLUSH_BATCH_SIZE OR when the oldest buffered
@@ -89,6 +110,28 @@ class HistoryStore:
         age = now - self._tick_buffer_since
         if len(self._tick_buffer) >= self.FLUSH_BATCH_SIZE or age >= self.FLUSH_MAX_AGE_S:
             await self.flush_ticks()
+
+    async def save_eod_tick(self, stock: dict) -> None:
+        """
+        Persist a single EOD price row to eod_prices immediately (no buffering).
+
+        Called by scripts/fetch_historical.py and the nightly sync job.
+        Uses INSERT OR IGNORE so duplicate (symbol, date_key) pairs are silently
+        skipped — the first row written per day is kept.
+        """
+        row = _stock_to_eod_row(stock)
+        try:
+            async with get_session() as session:
+                # Check if this (symbol, date_key) already exists
+                existing = await session.execute(
+                    select(EODPrice.id)
+                    .where(EODPrice.symbol == row["symbol"])
+                    .where(EODPrice.date_key == row["date_key"])
+                )
+                if existing.scalar() is None:
+                    session.add(EODPrice(**row))
+        except Exception as exc:
+            logger.error("Failed to save EOD tick %s %s: %s", row.get("symbol"), row.get("date_key"), exc)
 
     async def save_signal(self, signal: dict) -> None:
         """
@@ -111,20 +154,19 @@ class HistoryStore:
             await self.flush_signals()
 
     async def flush_ticks(self) -> None:
-        """Write all buffered ticks to DB in a single INSERT."""
+        """Write all buffered ticks to intraday_ticks in a single INSERT."""
         if not self._tick_buffer:
             return
         async with self._flush_lock:
-            # Drain buffer inside the lock so flush_signals can't overlap
             batch = self._tick_buffer[:]
             self._tick_buffer.clear()
-            rows = [_stock_to_row(s) for s in batch]
+            rows = [_stock_to_intraday_row(s) for s in batch]
             try:
                 async with get_session() as session:
-                    session.add_all([PriceHistory(**r) for r in rows])
-                logger.debug("Flushed %d price ticks to DB", len(rows))
+                    session.add_all([IntradayTick(**r) for r in rows])
+                logger.debug("Flushed %d intraday ticks to DB", len(rows))
             except Exception as exc:
-                logger.error("Failed to flush price ticks: %s", exc)
+                logger.error("Failed to flush intraday ticks: %s", exc)
                 # Re-buffer on failure so data isn't lost
                 self._tick_buffer = batch + self._tick_buffer
 
@@ -155,24 +197,50 @@ class HistoryStore:
         since: Optional[int] = None,
     ) -> list[dict]:
         """
-        Return the last `n` price ticks for `symbol`, ordered oldest-first.
-        Optionally filter to ticks since a Unix timestamp.
-        Returns plain dicts (not ORM objects) — safe to serialize to JSON.
+        Return the last `n` intraday ticks for `symbol`, ordered oldest-first.
+
+        Reads from intraday_ticks first. Falls back to price_history for
+        symbols whose data predates the migration.
+        """
+        rows = await self._get_intraday_rows(symbol.upper(), n=n, since=since)
+        if not rows:
+            # Legacy fallback — price_history still has older data
+            rows = await self._get_legacy_rows(symbol.upper(), n=n, since=since)
+        return rows
+
+    async def get_eod_history(
+        self,
+        symbol: str,
+        n: int = 500,
+        start_ts: Optional[int] = None,
+        end_ts:   Optional[int] = None,
+    ) -> list[dict]:
+        """
+        Return EOD daily rows for `symbol` ordered oldest-first.
+
+        Used by the backtester and FeatureEngine. Falls back to price_history
+        (source='historical') if eod_prices has no data for this symbol yet.
         """
         async with get_session() as session:
             q = (
-                select(PriceHistory)
-                .where(PriceHistory.symbol == symbol.upper())
+                select(EODPrice)
+                .where(EODPrice.symbol == symbol.upper())
             )
-            if since:
-                q = q.where(PriceHistory.scraped_at >= since)
+            if start_ts:
+                start_key = _ts_to_date_key(start_ts)
+                q = q.where(EODPrice.date_key >= start_key)
+            if end_ts:
+                end_key = _ts_to_date_key(end_ts)
+                q = q.where(EODPrice.date_key <= end_key)
+            q = q.order_by(EODPrice.date_key.asc()).limit(n)
+            result  = await session.execute(q)
+            eod_rows = result.scalars().all()
 
-            # Fetch last N rows by time (desc), then reverse for oldest-first
-            q = q.order_by(PriceHistory.scraped_at.desc()).limit(n)
-            result = await session.execute(q)
-            rows = result.scalars().all()
+        if eod_rows:
+            return [_eod_row_to_dict(r) for r in eod_rows]
 
-        return [_row_to_dict(r) for r in reversed(rows)]
+        # Fallback: legacy price_history with source='historical'
+        return await self._get_legacy_eod_rows(symbol.upper(), n=n, start_ts=start_ts, end_ts=end_ts)
 
     async def get_recent_signals(
         self,
@@ -193,34 +261,63 @@ class HistoryStore:
         return [_signal_row_to_dict(r) for r in rows]
 
     async def get_available_symbols(self) -> list[str]:
-        """Return all symbols that have price history in the DB."""
+        """Return all symbols that have intraday tick history in the DB."""
         async with get_session() as session:
-            q = select(PriceHistory.symbol).distinct()
+            # Check intraday_ticks first (new table)
+            q = select(IntradayTick.symbol).distinct()
             result = await session.execute(q)
-            return [row[0] for row in result.all()]
+            symbols = [row[0] for row in result.all()]
+
+        if not symbols:
+            # Fall back to legacy price_history during transition
+            async with get_session() as session:
+                q = select(PriceHistory.symbol).distinct()
+                result = await session.execute(q)
+                symbols = [row[0] for row in result.all()]
+
+        return symbols
 
     async def get_history_stats(self) -> dict:
-        """Diagnostic: row counts and time range per symbol."""
+        """Diagnostic: row counts and time range per symbol across both tables."""
         async with get_session() as session:
             q = (
                 select(
-                    PriceHistory.symbol,
-                    func.count(PriceHistory.id).label("ticks"),
-                    func.min(PriceHistory.scraped_at).label("first_at"),
-                    func.max(PriceHistory.scraped_at).label("last_at"),
+                    IntradayTick.symbol,
+                    func.count(IntradayTick.id).label("ticks"),
+                    func.min(IntradayTick.scraped_at).label("first_at"),
+                    func.max(IntradayTick.scraped_at).label("last_at"),
                 )
-                .group_by(PriceHistory.symbol)
+                .group_by(IntradayTick.symbol)
                 .order_by(text("ticks DESC"))
             )
             result = await session.execute(q)
-            return {
+            intraday_stats = {
                 row.symbol: {
-                    "ticks":    row.ticks,
-                    "first_at": row.first_at,
-                    "last_at":  row.last_at,
+                    "intraday_ticks": row.ticks,
+                    "first_at":       row.first_at,
+                    "last_at":        row.last_at,
                 }
                 for row in result.all()
             }
+
+            q2 = (
+                select(
+                    EODPrice.symbol,
+                    func.count(EODPrice.id).label("days"),
+                    func.min(EODPrice.date_key).label("first_date"),
+                    func.max(EODPrice.date_key).label("last_date"),
+                )
+                .group_by(EODPrice.symbol)
+                .order_by(text("days DESC"))
+            )
+            result2 = await session.execute(q2)
+            for row in result2.all():
+                sym_stats = intraday_stats.setdefault(row.symbol, {})
+                sym_stats["eod_days"]   = row.days
+                sym_stats["first_date"] = row.first_date
+                sym_stats["last_date"]  = row.last_date
+
+        return intraday_stats
 
     # ------------------------------------------------------------------
     # Warm-up (called once on app startup)
@@ -228,38 +325,43 @@ class HistoryStore:
 
     async def warm_price_buffer(self, price_buffer: "PriceBuffer") -> None:
         """
-        Load the last 200 closing prices per symbol from DB into the
-        in-memory PriceBuffer so that SMA / RSI calculations are
-        immediately accurate — even after a server restart.
+        Load the last 200 closing prices per symbol from intraday_ticks into
+        the in-memory PriceBuffer so SMA/RSI calculations are immediately
+        accurate — even after a server restart.
 
-        Without this, every restart would produce 20+ ticks of blind
-        HOLD signals while the buffer slowly fills up.
-
-        Optimisation: previously this issued N+1 queries (one SELECT DISTINCT
-        to get symbols, then one SELECT per symbol).  Now it issues 2 queries:
-          1. SELECT DISTINCT symbol                          (get symbol list)
-          2. SELECT symbol, close WHERE symbol IN (...)      (all prices at once)
-        Prices are limited to a recent window then capped at 200 per symbol
-        in Python, so the query never pulls more rows than necessary.
+        Falls back to price_history (legacy) if intraday_ticks is empty.
         """
         symbols = await self.get_available_symbols()
         if not symbols:
             logger.info("warm_price_buffer: no history in DB yet — starting fresh")
             return
 
-        # At 15 s poll, 200 ticks ≈ 50 min.  Use a 4-hour window to guarantee
+        # At 15 s poll, 200 ticks ≈ 50 min. Use a 4-hour window to guarantee
         # we get 200 rows even after a long gap, without fetching all history.
         cutoff = int(time.time()) - (4 * 3600)
 
+        # Try intraday_ticks first
         async with get_session() as session:
             q = (
-                select(PriceHistory.symbol, PriceHistory.close)
-                .where(PriceHistory.symbol.in_(symbols))
-                .where(PriceHistory.scraped_at >= cutoff)
-                .order_by(PriceHistory.symbol, PriceHistory.scraped_at.desc())
+                select(IntradayTick.symbol, IntradayTick.close)
+                .where(IntradayTick.symbol.in_(symbols))
+                .where(IntradayTick.scraped_at >= cutoff)
+                .order_by(IntradayTick.symbol, IntradayTick.scraped_at.desc())
             )
             result = await session.execute(q)
             all_rows = result.all()
+
+        if not all_rows:
+            # Fall back to legacy price_history
+            async with get_session() as session:
+                q = (
+                    select(PriceHistory.symbol, PriceHistory.close)
+                    .where(PriceHistory.symbol.in_(symbols))
+                    .where(PriceHistory.scraped_at >= cutoff)
+                    .order_by(PriceHistory.symbol, PriceHistory.scraped_at.desc())
+                )
+                result = await session.execute(q)
+                all_rows = result.all()
 
         # Group in Python: keep first 200 per symbol (already DESC, so these
         # are the most recent), then push oldest-first into the buffer.
@@ -276,7 +378,7 @@ class HistoryStore:
             total += len(prices)
 
         logger.info(
-            "warm_price_buffer: loaded %d ticks across %d symbols from DB (2 queries)",
+            "warm_price_buffer: loaded %d ticks across %d symbols",
             total,
             len(by_symbol),
         )
@@ -288,9 +390,7 @@ class HistoryStore:
 
         Without this, every server restart resets _prev_signals to {}, so
         signal_changed is False for ALL symbols on the first poll tick after
-        a restart — even for signals that were already active.  This causes
-        the signals_log to accumulate rows with signal_changed=False that
-        should have been True, silently corrupting the training dataset.
+        a restart — even for signals that were already active.
         """
         async with get_session() as session:
             subq = (
@@ -326,11 +426,11 @@ class HistoryStore:
     async def warm_volume_baselines(self, volume_strategy: "VolumeSpikeStrategy") -> None:
         """
         Pre-fill VolumeSpikeStrategy's per-symbol rolling volume buffer from
-        the most recent price_history rows, so the strategy has a real
-        baseline to compare against instead of the 1 M hardcoded fallback.
+        the most recent intraday_ticks rows.
 
         Uses last 20 non-null, non-zero volume readings per symbol within a
-        7-day lookback window.  Falls back silently if the table is empty.
+        7-day lookback window.  Falls back to price_history if intraday_ticks
+        is empty.
         """
         symbols = await self.get_available_symbols()
         if not symbols:
@@ -339,17 +439,32 @@ class HistoryStore:
 
         cutoff = int(time.time()) - (7 * 24 * 3600)
 
+        # Try intraday_ticks first
         async with get_session() as session:
             q = (
-                select(PriceHistory.symbol, PriceHistory.volume)
-                .where(PriceHistory.symbol.in_(symbols))
-                .where(PriceHistory.scraped_at >= cutoff)
-                .where(PriceHistory.volume.isnot(None))
-                .where(PriceHistory.volume > 0)
-                .order_by(PriceHistory.symbol, PriceHistory.scraped_at.desc())
+                select(IntradayTick.symbol, IntradayTick.volume)
+                .where(IntradayTick.symbol.in_(symbols))
+                .where(IntradayTick.scraped_at >= cutoff)
+                .where(IntradayTick.volume.isnot(None))
+                .where(IntradayTick.volume > 0)
+                .order_by(IntradayTick.symbol, IntradayTick.scraped_at.desc())
             )
             result = await session.execute(q)
             all_rows = result.all()
+
+        if not all_rows:
+            # Fall back to legacy
+            async with get_session() as session:
+                q = (
+                    select(PriceHistory.symbol, PriceHistory.volume)
+                    .where(PriceHistory.symbol.in_(symbols))
+                    .where(PriceHistory.scraped_at >= cutoff)
+                    .where(PriceHistory.volume.isnot(None))
+                    .where(PriceHistory.volume > 0)
+                    .order_by(PriceHistory.symbol, PriceHistory.scraped_at.desc())
+                )
+                result = await session.execute(q)
+                all_rows = result.all()
 
         by_symbol: dict[str, list[int]] = {}
         for row in all_rows:
@@ -368,13 +483,72 @@ class HistoryStore:
             total, len(by_symbol),
         )
 
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    async def _get_intraday_rows(
+        self,
+        symbol: str,
+        n: int = 200,
+        since: Optional[int] = None,
+    ) -> list[dict]:
+        """Fetch from intraday_ticks, oldest-first."""
+        async with get_session() as session:
+            q = select(IntradayTick).where(IntradayTick.symbol == symbol)
+            if since:
+                q = q.where(IntradayTick.scraped_at >= since)
+            q = q.order_by(IntradayTick.scraped_at.desc()).limit(n)
+            result = await session.execute(q)
+            rows = result.scalars().all()
+        return [_intraday_row_to_dict(r) for r in reversed(rows)]
+
+    async def _get_legacy_rows(
+        self,
+        symbol: str,
+        n: int = 200,
+        since: Optional[int] = None,
+    ) -> list[dict]:
+        """Fallback: fetch from price_history, oldest-first."""
+        async with get_session() as session:
+            q = select(PriceHistory).where(PriceHistory.symbol == symbol)
+            if since:
+                q = q.where(PriceHistory.scraped_at >= since)
+            q = q.order_by(PriceHistory.scraped_at.desc()).limit(n)
+            result = await session.execute(q)
+            rows = result.scalars().all()
+        return [_legacy_row_to_dict(r) for r in reversed(rows)]
+
+    async def _get_legacy_eod_rows(
+        self,
+        symbol: str,
+        n: int = 500,
+        start_ts: Optional[int] = None,
+        end_ts:   Optional[int] = None,
+    ) -> list[dict]:
+        """Fallback: fetch EOD rows from price_history where source='historical'."""
+        async with get_session() as session:
+            q = (
+                select(PriceHistory)
+                .where(PriceHistory.symbol == symbol)
+                .where(PriceHistory.source == "historical")
+            )
+            if start_ts:
+                q = q.where(PriceHistory.scraped_at >= start_ts)
+            if end_ts:
+                q = q.where(PriceHistory.scraped_at <= end_ts)
+            q = q.order_by(PriceHistory.scraped_at.asc()).limit(n)
+            result = await session.execute(q)
+            rows = result.scalars().all()
+        return [_legacy_row_to_dict(r) for r in rows]
+
 
 # ------------------------------------------------------------------
-# Private helpers
+# Private row-conversion helpers
 # ------------------------------------------------------------------
 
-def _stock_to_row(s: dict) -> dict:
-    """Convert a scraper stock dict → PriceHistory column dict."""
+def _stock_to_intraday_row(s: dict) -> dict:
+    """Convert a scraper stock dict → IntradayTick column dict."""
     return {
         "symbol":     s.get("symbol", "").upper(),
         "sector":     s.get("sector"),
@@ -387,6 +561,24 @@ def _stock_to_row(s: dict) -> dict:
         "change_pct": s.get("change_pct"),
         "source":     s.get("source", "live"),
         "scraped_at": int(s.get("timestamp", time.time())),
+    }
+
+
+def _stock_to_eod_row(s: dict) -> dict:
+    """Convert a stock dict → EODPrice column dict."""
+    ts = int(s.get("timestamp", time.time()))
+    return {
+        "symbol":     s.get("symbol", "").upper(),
+        "date_key":   _ts_to_date_key(ts),
+        "sector":     s.get("sector"),
+        "open_price": s.get("open"),
+        "high":       s.get("high"),
+        "low":        s.get("low"),
+        "close":      s.get("current", s.get("close", 0.0)),
+        "volume":     s.get("volume"),
+        "change_pct": s.get("change_pct"),
+        "ldcp":       s.get("ldcp"),
+        "scraped_at": ts,
     }
 
 
@@ -419,7 +611,42 @@ def _cap_confidence(value: Optional[float]) -> Optional[float]:
     return round(min(float(value), 0.85), 4)
 
 
-def _row_to_dict(row: PriceHistory) -> dict:
+def _intraday_row_to_dict(row: IntradayTick) -> dict:
+    return {
+        "id":         row.id,
+        "symbol":     row.symbol,
+        "sector":     row.sector,
+        "ldcp":       row.ldcp,
+        "open":       row.open_price,
+        "high":       row.high,
+        "low":        row.low,
+        "close":      row.close,
+        "volume":     row.volume,
+        "change_pct": row.change_pct,
+        "source":     row.source,
+        "scraped_at": row.scraped_at,
+    }
+
+
+def _eod_row_to_dict(row: EODPrice) -> dict:
+    return {
+        "id":         row.id,
+        "symbol":     row.symbol,
+        "date_key":   row.date_key,
+        "sector":     row.sector,
+        "open":       row.open_price,
+        "high":       row.high,
+        "low":        row.low,
+        "close":      row.close,
+        "volume":     row.volume,
+        "change_pct": row.change_pct,
+        "ldcp":       row.ldcp,
+        "scraped_at": row.scraped_at,
+    }
+
+
+def _legacy_row_to_dict(row: PriceHistory) -> dict:
+    """Shared converter for PriceHistory fallback rows."""
     return {
         "id":         row.id,
         "symbol":     row.symbol,

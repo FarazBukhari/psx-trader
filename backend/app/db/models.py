@@ -2,7 +2,9 @@
 SQLAlchemy ORM models — all PSX Trader tables.
 
 Table index:
-  - PriceHistory        : one row per scrape tick per symbol
+  - PriceHistory        : one row per scrape tick per symbol  [LEGACY — kept for backfill; new writes go to IntradayTick]
+  - IntradayTick        : 15-second poll snapshots during live session  (replaces PriceHistory for live data)
+  - EODPrice            : one row per symbol per calendar day — daily OHLCV from historical download
   - SignalLog           : every generated signal (persisted for prediction training)
   - Portfolio           : one row per portfolio (single for now, multi later)
   - Position            : open stock positions (source of truth via PortfolioManager)
@@ -18,6 +20,7 @@ from __future__ import annotations
 import time
 from typing import Optional
 
+import sqlalchemy as sa
 from sqlalchemy import (
     Boolean,
     Float,
@@ -59,6 +62,87 @@ class PriceHistory(Base):
 
     def __repr__(self) -> str:
         return f"<PriceHistory {self.symbol} {self.close} @ {self.scraped_at}>"
+
+
+# ---------------------------------------------------------------------------
+# IntradayTick  (replaces PriceHistory for new live-scrape writes)
+# ---------------------------------------------------------------------------
+
+class IntradayTick(Base):
+    """
+    One row per 15-second poll snapshot per symbol.
+
+    Written by HistoryStore.save_tick() during live market sessions.
+    Used by: signal_engine warm-up, signal_evaluator, prediction_resolver,
+             forward_tracker, data_quality monitor.
+
+    Intentionally mirrors the PriceHistory schema so migration is a straight
+    INSERT INTO intraday_ticks SELECT ... FROM price_history WHERE source != 'historical'.
+    """
+    __tablename__ = "intraday_ticks"
+
+    id         : Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol     : Mapped[str]            = mapped_column(String(16), nullable=False, index=True)
+    sector     : Mapped[Optional[str]]  = mapped_column(String(64))
+    ldcp       : Mapped[Optional[float]]= mapped_column(Float)   # Last Day Closing Price
+    open_price : Mapped[Optional[float]]= mapped_column(Float)
+    high       : Mapped[Optional[float]]= mapped_column(Float)
+    low        : Mapped[Optional[float]]= mapped_column(Float)
+    close      : Mapped[float]          = mapped_column(Float, nullable=False)
+    volume     : Mapped[Optional[int]]  = mapped_column(Integer)
+    change_pct : Mapped[Optional[float]]= mapped_column(Float)
+    source     : Mapped[str]            = mapped_column(String(8), default="live")
+    scraped_at : Mapped[int]            = mapped_column(Integer, nullable=False, index=True)  # Unix ts
+
+    __table_args__ = (
+        Index("ix_it_symbol_time", "symbol", "scraped_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<IntradayTick {self.symbol} {self.close} @ {self.scraped_at}>"
+
+
+# ---------------------------------------------------------------------------
+# EODPrice  (daily OHLCV — source of truth for backtester + ML training)
+# ---------------------------------------------------------------------------
+
+class EODPrice(Base):
+    """
+    One row per symbol per calendar day.
+
+    Written by HistoryStore.save_eod_tick() during nightly EOD sync
+    (scripts/fetch_historical.py) or backfilled from price_history rows
+    where source = 'historical'.
+
+    Used by: backtester._load_rows(), FeatureEngine (future).
+
+    The `date_key` column (YYYYMMDD integer) is the natural unique key —
+    cheaper to index than a date string, cheaper to compare than a timestamp.
+    """
+    __tablename__ = "eod_prices"
+
+    id         : Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol     : Mapped[str]            = mapped_column(String(16), nullable=False, index=True)
+    date_key   : Mapped[int]            = mapped_column(Integer, nullable=False)  # YYYYMMDD
+    sector     : Mapped[Optional[str]]  = mapped_column(String(64))
+    open_price : Mapped[Optional[float]]= mapped_column(Float)
+    high       : Mapped[Optional[float]]= mapped_column(Float)
+    low        : Mapped[Optional[float]]= mapped_column(Float)
+    close      : Mapped[float]          = mapped_column(Float, nullable=False)
+    volume     : Mapped[Optional[int]]  = mapped_column(Integer)
+    change_pct : Mapped[Optional[float]]= mapped_column(Float)
+    ldcp       : Mapped[Optional[float]]= mapped_column(Float)   # previous day close (for pct calc)
+    scraped_at : Mapped[int]            = mapped_column(Integer, nullable=False)  # Unix ts of source row
+
+    __table_args__ = (
+        # Uniqueness: one closing price per symbol per day
+        sa.UniqueConstraint("symbol", "date_key", name="uq_eod_symbol_date"),
+        Index("ix_eod_symbol_date", "symbol", "date_key"),
+        Index("ix_eod_date_key",    "date_key"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<EODPrice {self.symbol} {self.date_key} close={self.close}>"
 
 
 # ---------------------------------------------------------------------------
