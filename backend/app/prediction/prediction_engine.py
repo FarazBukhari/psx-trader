@@ -63,6 +63,7 @@ from typing import Optional
 from ..db.database import get_session
 from ..db.models import PredictionLog
 from ..strategy.signal_engine import price_buffer
+from .ml_scorer import scorer as _ml_scorer
 
 # Serialise all prediction-log writes — prevents "database is locked" when
 # multiple asyncio.create_task calls hit SQLite simultaneously.
@@ -687,6 +688,8 @@ class PredictionEngine:
 
     def __init__(self) -> None:
         self._vol_buffer = VolumeBuffer()
+        # Load ML models lazily — no-op if models not yet trained
+        _ml_scorer.load()
 
     # ── Public ──────────────────────────────────────────────────────────────
 
@@ -747,7 +750,15 @@ class PredictionEngine:
             votes = [(v, min(s * vol_mult, 1.0), n) for v, s, n in votes]
 
         # ── 4. Weighted confidence combine ─────────────────────────────────
-        direction, confidence, basis, total_str, agree = _combine_votes(votes)
+        direction, heuristic_conf, basis, total_str, agree = _combine_votes(votes)
+
+        # ── 4b. ML confidence override ─────────────────────────────────────
+        # If a trained model is available, replace heuristic confidence with
+        # a calibrated ML probability.  Direction still comes from the votes.
+        ml_scores   = _ml_scorer.score(symbol)
+        ml_conf     = _ml_scorer.confidence(symbol)
+        confidence  = ml_conf if ml_conf is not None else heuristic_conf
+        ml_active   = ml_conf is not None
 
         # ── 5. Trade action ────────────────────────────────────────────────
         if (
@@ -774,6 +785,9 @@ class PredictionEngine:
             "basis":             basis,
             "expected_move_pct": _expected_move(prices, price, direction, hold_days),
             "reward_risk_ratio": _reward_risk_ratio(prices, price, direction),
+            # ML metadata — present when model is active, absent otherwise
+            **({"ml_scores": ml_scores, "heuristic_confidence": heuristic_conf}
+               if ml_active else {}),
         }
 
         enriched = dict(signal)
