@@ -13,3 +13,5 @@ aiosqlite>=0.19.0       # async SQLite driver
 alembic>=1.13.0         # schema migrations
 scipy>=1.13.0           # linregress for prediction engine (Sprint 3)
 pyarrow>=16.0.0         # Parquet I/O for feature store (Evolution Plan)
+lightgbm>=4.3.0         # gradient boosted classifier (A3 model trainer)
+scikit-learn>=1.4.0     # metrics, calibration, walk-forward CV (A3)

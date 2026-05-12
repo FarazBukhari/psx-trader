@@ -356,8 +356,13 @@ def _add_cross_sectional(feat_all: pd.DataFrame) -> pd.DataFrame:
     """
     Add sector-relative percentile rank features.
     Computed across all symbols sharing the same (date_key, sector) pair.
+
+    When sector is NULL (e.g. historical EOD data from dps.psx.com.pk which
+    does not expose sector info), all symbols are grouped under "unknown" so
+    ranks are computed market-wide rather than being left as NaN.
     """
     feat_all = feat_all.copy()
+    feat_all["sector"] = feat_all["sector"].fillna("unknown")
 
     for col, new_col in [
         ("ret_5d",  "sector_ret5d_rank"),
